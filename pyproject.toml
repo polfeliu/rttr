@@ -1,0 +1,22 @@
+[project]
+name = "rttr"
+version = "0.1.0"
+description = "Release The T-Rex — GUI testing framework for Windows desktop applications"
+requires-python = ">=3.13"
+dependencies = [
+    "pywinauto>=0.6.9,<0.7.0",
+    "pillow>=12.1.0,<13.0.0",
+    "keyboard>=0.13.5,<0.14.0",
+    "fastmcp>=3.0.0,<4.0.0",
+    "pytest>=9.0.0",
+]
+
+[project.entry-points.pytest11]
+rttr = "rttr"
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["rttr", "rttr.mcp"]

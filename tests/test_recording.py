@@ -1,0 +1,109 @@
+"""Tests for ``rttr.recording`` — screen recording lifecycle orchestration."""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from rttr import _state
+from rttr import recording
+
+
+class TestStart:
+    """Verify ``recording.start`` delegates to the recorder."""
+
+    def test_noop_when_no_debug_logger(self) -> None:
+        _state.debug_logger = None
+        session = MagicMock()
+        recording.start(session)
+        # No crash — that's the contract.
+
+    def test_starts_recorder_when_recording_enabled(self, tmp_path: pytest.TempPathFactory) -> None:
+        dl = MagicMock()
+        dl.session_dir = tmp_path
+        _state.debug_logger = dl
+
+        session = MagicMock()
+        session.config.getoption.return_value = False  # --no-record = False
+
+        with patch.object(_state.recorder, "start") as mock_start:
+            recording.start(session)
+            mock_start.assert_called_once_with(tmp_path)
+
+    def test_does_not_start_when_no_record_flag(self) -> None:
+        dl = MagicMock()
+        _state.debug_logger = dl
+
+        session = MagicMock()
+        session.config.getoption.return_value = True  # --no-record = True
+
+        with patch.object(_state.recorder, "start") as mock_start:
+            recording.start(session)
+            mock_start.assert_not_called()
+
+
+class TestStop:
+    """Verify ``recording.stop`` stops the recorder and processes artifacts."""
+
+    def test_calls_recorder_stop(self, tmp_path: pytest.TempPathFactory) -> None:
+        session = MagicMock()
+        session.testsfailed = 0
+
+        with patch.object(_state.recorder, "stop") as mock_stop:
+            recording.stop(session)
+            mock_stop.assert_called_once_with(had_failures=False)
+
+    def test_embeds_chapters_when_files_exist(self, tmp_path: pytest.TempPathFactory) -> None:
+        dl = MagicMock()
+        dl.session_dir = tmp_path
+        _state.debug_logger = dl
+
+        # Create the expected files.
+        (tmp_path / "session_recording.mp4").write_bytes(b"fake")
+        (tmp_path / "session_recording_markers.jsonl").write_text("{}", encoding="utf-8")
+
+        session = MagicMock()
+        session.testsfailed = 0
+
+        with (
+            patch.object(_state.recorder, "stop"),
+            patch("rttr.recording.embed_test_chapters") as mock_embed,
+            patch("rttr.recording.extract_failure_frames"),
+        ):
+            recording.stop(session)
+            mock_embed.assert_called_once()
+
+    def test_extracts_frames_on_failure(self, tmp_path: pytest.TempPathFactory) -> None:
+        dl = MagicMock()
+        dl.session_dir = tmp_path
+        _state.debug_logger = dl
+
+        # Create the expected files.
+        (tmp_path / "session_recording.mp4").write_bytes(b"fake")
+        (tmp_path / "session_recording_markers.jsonl").write_text("{}", encoding="utf-8")
+
+        session = MagicMock()
+        session.testsfailed = 2
+
+        with (
+            patch.object(_state.recorder, "stop"),
+            patch("rttr.recording.embed_test_chapters"),
+            patch("rttr.recording.extract_failure_frames") as mock_extract,
+        ):
+            recording.stop(session)
+            mock_extract.assert_called_once()
+
+
+class TestMarkers:
+    """Verify ``mark_test_start`` and ``mark_test_end`` delegate to the recorder."""
+
+    def test_mark_test_start(self) -> None:
+        with patch.object(_state.recorder, "mark_test_start") as mock:
+            recording.mark_test_start("test_a.py::test_one")
+            mock.assert_called_once_with("test_a.py::test_one")
+
+    def test_mark_test_end(self) -> None:
+        with patch.object(_state.recorder, "mark_test_end") as mock:
+            recording.mark_test_end("test_a.py::test_one", "passed")
+            mock.assert_called_once_with("test_a.py::test_one", "passed")
