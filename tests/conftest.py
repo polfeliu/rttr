@@ -58,4 +58,3 @@ def mock_recorder() -> MagicMock:
     rec.is_recording = True
     with patch("rttr.session_outputs._state.session.recorder", rec):
         yield rec
-

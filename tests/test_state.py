@@ -49,3 +49,25 @@ class TestCollections:
 
     def test_session_log_entries_is_list(self) -> None:
         assert isinstance(_state.session.session_log_entries, list)
+
+
+class TestReset:
+    """Verify ``SessionState.reset`` clears mutable state."""
+
+    def test_clears_all_collections(self) -> None:
+        _state.session.test_outputs["test"] = "value"  # type: ignore[assignment]
+        _state.session.collected_nodeids.append("nid")
+        _state.session.session_log_entries.append("entry")  # type: ignore[arg-type]
+        _state.session.debug_logger = "something"  # type: ignore[assignment]
+
+        _state.session.reset()
+
+        assert _state.session.test_outputs == {}
+        assert _state.session.collected_nodeids == []
+        assert _state.session.session_log_entries == []
+        assert _state.session.debug_logger is None
+
+    def test_preserves_recorder(self) -> None:
+        original_recorder = _state.session.recorder
+        _state.session.reset()
+        assert _state.session.recorder is original_recorder

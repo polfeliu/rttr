@@ -8,12 +8,8 @@ and the session lifecycle is coherent end-to-end.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
 
 import pytest
-
-if TYPE_CHECKING:
-    pass
 
 # Enable the pytester plugin for this file.
 pytest_plugins = ["pytester"]

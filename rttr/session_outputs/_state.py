@@ -11,10 +11,10 @@ from __future__ import annotations
 import atexit
 from typing import TYPE_CHECKING
 
-from rttr.session_outputs._types import LogEntry, TestOutput
 from rttr.session_outputs.video_recorder import SessionRecorder
 
 if TYPE_CHECKING:
+    from rttr.session_outputs._types import LogEntry, TestOutput
     from rttr.session_outputs.debug_logger import DebugLogger
 
 
@@ -44,10 +44,10 @@ class SessionState:
         Returns:
             The instantiated DebugLogger.
         """
-        from rttr.session_outputs.debug_logger import DebugLogger as _DL  # noqa: PLC0415
+        from rttr.session_outputs.debug_logger import DebugLogger as _DebugLogger  # noqa: PLC0415
 
         if self.debug_logger is None:
-            self.debug_logger = _DL()
+            self.debug_logger = _DebugLogger()
         return self.debug_logger
 
 

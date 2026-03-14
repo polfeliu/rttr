@@ -31,6 +31,7 @@ Create your application POM by extending `rttr.base.BaseModel`:
 ```python
 from rttr.base import BaseModel
 
+
 class MyApp(BaseModel):
     def __init__(self) -> None:
         super().__init__(element=self.find_top_level_window("My Application"))

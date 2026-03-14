@@ -1,5 +1,4 @@
-"""Generate ``session_data.json`` and a standalone ``viewer.html`` after
-the test session.
+"""Generate ``session_data.json`` and a standalone ``viewer.html``.
 
 Aggregates test results, tracebacks, captured output, failure dumps,
 extracted frames, and synced log entries into a single JSON artifact.
@@ -13,11 +12,13 @@ import logging
 import re
 from datetime import UTC, datetime
 from pathlib import Path
-
-import pytest
+from typing import TYPE_CHECKING
 
 from rttr.session_outputs import _state
 from rttr.session_outputs._types import TestOutput
+
+if TYPE_CHECKING:
+    import pytest
 
 logger = logging.getLogger(__name__)
 

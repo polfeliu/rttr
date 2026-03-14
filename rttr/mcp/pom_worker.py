@@ -37,10 +37,11 @@ if not _app_spec:
 
 _module_path, _, _class_name = _app_spec.partition(":")
 _app_module = importlib.import_module(_module_path)
-AppClass: type = getattr(_app_module, _class_name)
 
 # Import BaseModel from rttr for widget type detection
 from rttr.base import BaseModel  # noqa: E402
+
+AppClass = getattr(_app_module, _class_name)
 
 # Initialise COM on the main thread so pywinauto / UIA calls work.
 pythoncom.CoInitialize()
@@ -186,6 +187,9 @@ def _handle_pom_chain(payload: dict[str, Any]) -> Any:  # noqa: ANN401
 
     Returns:
         Serialised return value of the final step.
+
+    Raises:
+        RuntimeError: If a step references a missing attribute or non-callable.
     """
     steps: list[dict[str, Any]] = payload["steps"]
     current: Any = AppClass.get_active_instance()

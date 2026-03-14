@@ -6,8 +6,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from rttr.session_outputs import _state
-from rttr.session_outputs import start_recording, stop_recording, mark_test_start, mark_test_end
+from rttr.session_outputs import (
+    _state,
+    mark_test_end,
+    mark_test_start,
+    start_recording,
+    stop_recording,
+)
 
 
 class TestStart:
@@ -93,6 +98,47 @@ class TestStop:
         ):
             stop_recording(session)
             mock_extract.assert_called_once()
+
+    def test_swallows_chapter_embedding_exception(self, tmp_path: pytest.TempPathFactory) -> None:
+        dl = MagicMock()
+        dl.session_dir = tmp_path
+        _state.session.debug_logger = dl
+
+        (tmp_path / "session_recording.mp4").write_bytes(b"fake")
+        (tmp_path / "session_recording_markers.jsonl").write_text("{}", encoding="utf-8")
+
+        session = MagicMock()
+        session.testsfailed = 0
+
+        with (
+            patch.object(_state.session.recorder, "stop"),
+            patch(
+                "rttr.session_outputs.embed_test_chapters",
+                side_effect=RuntimeError("boom"),
+            ),
+        ):
+            stop_recording(session)  # should not raise
+
+    def test_swallows_frame_extraction_exception(self, tmp_path: pytest.TempPathFactory) -> None:
+        dl = MagicMock()
+        dl.session_dir = tmp_path
+        _state.session.debug_logger = dl
+
+        (tmp_path / "session_recording.mp4").write_bytes(b"fake")
+        (tmp_path / "session_recording_markers.jsonl").write_text("{}", encoding="utf-8")
+
+        session = MagicMock()
+        session.testsfailed = 1
+
+        with (
+            patch.object(_state.session.recorder, "stop"),
+            patch("rttr.session_outputs.embed_test_chapters"),
+            patch(
+                "rttr.session_outputs.extract_failure_frames",
+                side_effect=RuntimeError("boom"),
+            ),
+        ):
+            stop_recording(session)  # should not raise
 
 
 class TestMarkers:

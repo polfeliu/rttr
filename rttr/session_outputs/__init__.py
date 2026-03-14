@@ -18,8 +18,6 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-import pytest
-
 from rttr.session_outputs import _state
 from rttr.session_outputs._logger import SessionLogHandler, attach_log_handler
 from rttr.session_outputs._types import LogEntry, TestOutput, TestResult
@@ -31,6 +29,9 @@ from rttr.session_outputs.test_outputs.failure_frames import (
 )
 from rttr.session_outputs.video_chapters import embed_test_chapters
 from rttr.session_outputs.video_recorder import SessionRecorder
+
+if TYPE_CHECKING:
+    import pytest
 
 logger = logging.getLogger(__name__)
 

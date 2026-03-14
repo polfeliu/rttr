@@ -86,7 +86,10 @@ class TestPytestCollectionModifyItems:
     """Verify ``pytest_collection_modifyitems`` records nodeids and applies timeout."""
 
     def test_records_collected_nodeids(self) -> None:
-        items = [MagicMock(nodeid="tests/test_a.py::test_one"), MagicMock(nodeid="tests/test_b.py::test_two")]
+        items = [
+            MagicMock(nodeid="tests/test_a.py::test_one"),
+            MagicMock(nodeid="tests/test_b.py::test_two"),
+        ]
         # Mark items as having no timeout marker
         for item in items:
             item.get_closest_marker.return_value = None

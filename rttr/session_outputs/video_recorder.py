@@ -166,12 +166,10 @@ class SessionRecorder:
         if self._process.poll() is not None:
             rc = self._process.returncode
             logger.warning(
-                "ffmpeg exited immediately (rc=%d). Check %s for details.",
+                "ffmpeg exited immediately (rc=%d).",
                 rc,
-                self._stderr_path,
             )
             self._process = None
-            self._close_stderr()
             return False
 
         self._start_time = time.monotonic()

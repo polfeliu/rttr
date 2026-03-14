@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -70,6 +69,51 @@ class TestFormatTree:
         result = _format_tree(el, depth=15, max_depth=12)
         assert result == ""
 
+    def test_handles_uia_error_in_control_type(self) -> None:
+        el = MagicMock()
+        type(el.element_info).control_type = property(lambda s: (_ for _ in ()).throw(RuntimeError("uia")))
+        el.window_text.return_value = "ok"
+        el.is_enabled.return_value = True
+        el.is_visible.return_value = True
+        el.children.return_value = []
+
+        result = _format_tree(el)
+        assert "[?]" in result
+        assert "title='ok'" in result
+
+    def test_handles_uia_error_in_is_enabled(self) -> None:
+        el = MagicMock()
+        el.element_info.control_type = "Button"
+        el.window_text.return_value = "ok"
+        el.is_enabled.side_effect = RuntimeError("uia")
+        el.is_visible.return_value = True
+        el.children.return_value = []
+
+        result = _format_tree(el)
+        assert "enabled=False" in result
+
+    def test_handles_uia_error_in_is_visible(self) -> None:
+        el = MagicMock()
+        el.element_info.control_type = "Button"
+        el.window_text.return_value = "ok"
+        el.is_enabled.return_value = True
+        el.is_visible.side_effect = RuntimeError("uia")
+        el.children.return_value = []
+
+        result = _format_tree(el)
+        assert "visible=False" in result
+
+    def test_includes_owner_annotation(self) -> None:
+        el = MagicMock()
+        el.element_info.control_type = "Button"
+        el.window_text.return_value = "ok"
+        el.is_enabled.return_value = True
+        el.is_visible.return_value = True
+        el.children.return_value = []
+
+        result = _format_tree(el, current_owner="MyWidget")
+        assert "→ MyWidget" in result
+
 
 class TestDebugLogger:
     """Verify ``DebugLogger`` session and test lifecycle."""
@@ -134,6 +178,14 @@ class TestDebugLogger:
         dl.new_test("test_noop")
         dl.discard_test_dir()  # should not raise
 
+    def test_discard_test_dir_handles_rmtree_error(self, tmp_path: Path) -> None:
+        dl = DebugLogger(sessions_root=tmp_path)
+        dl.new_test("test_rmtree_err")
+        dl._ensure_test_dir()
+
+        with patch("rttr.session_outputs.debug_logger.shutil.rmtree", side_effect=OSError("perm")):
+            dl.discard_test_dir()  # should not raise
+
     def test_capture_creates_state_dir(self, tmp_path: Path) -> None:
         dl = DebugLogger(sessions_root=tmp_path)
         dl.new_test("test_capture")
@@ -181,3 +233,110 @@ class TestDebugLogger:
         dl2 = DebugLogger(sessions_root=tmp_path)
         assert dl1.session_dir.name.startswith("001_")
         assert dl2.session_dir.name.startswith("002_")
+
+    def test_capture_with_pom_element(self, tmp_path: Path) -> None:
+        from rttr.base import BaseModel
+
+        dl = DebugLogger(sessions_root=tmp_path)
+        dl.new_test("test_pom")
+
+        # Create a mock POM that is an instance of BaseModel.
+        pom = MagicMock(spec=BaseModel)
+        pom.dump_state.return_value = "POM TREE: widget data"
+
+        mock_img = MagicMock()
+        with patch("rttr.session_outputs.debug_logger.ImageGrab.grab", return_value=mock_img):
+            state_dir = dl.capture("with_pom", element=pom)
+
+        content = (state_dir / "state.txt").read_text(encoding="utf-8")
+        assert "POM TREE: widget data" in content
+        pom.dump_state.assert_called_once()
+
+    def test_capture_pom_dump_state_uia_error(self, tmp_path: Path) -> None:
+        from rttr.base import BaseModel
+
+        dl = DebugLogger(sessions_root=tmp_path)
+        dl.new_test("test_pom_err")
+
+        pom = MagicMock(spec=BaseModel)
+        pom.dump_state.side_effect = RuntimeError("UIA gone")
+
+        mock_img = MagicMock()
+        with patch("rttr.session_outputs.debug_logger.ImageGrab.grab", return_value=mock_img):
+            state_dir = dl.capture("pom_error", element=pom)
+
+        content = (state_dir / "state.txt").read_text(encoding="utf-8")
+        assert "Could not call dump_state on POM" in content
+
+    def test_capture_non_pom_format_tree_uia_error(self, tmp_path: Path) -> None:
+        dl = DebugLogger(sessions_root=tmp_path)
+        dl.new_test("test_tree_err")
+
+        el = MagicMock()
+        # Make _format_tree raise via children() raising.
+        mock_img = MagicMock()
+        with (
+            patch("rttr.session_outputs.debug_logger.ImageGrab.grab", return_value=mock_img),
+            patch(
+                "rttr.session_outputs.debug_logger._format_tree",
+                side_effect=RuntimeError("tree broken"),
+            ),
+        ):
+            state_dir = dl.capture("tree_error", element=el)
+
+        content = (state_dir / "state.txt").read_text(encoding="utf-8")
+        assert "Could not dump tree via _format_tree" in content
+
+    def test_capture_handles_imagegrab_oserror(self, tmp_path: Path) -> None:
+        dl = DebugLogger(sessions_root=tmp_path)
+        dl.new_test("test_screenshot_fail")
+
+        with patch(
+            "rttr.session_outputs.debug_logger.ImageGrab.grab",
+            side_effect=OSError("no display"),
+        ):
+            state_dir = dl.capture("screenshot_error")
+
+        assert (state_dir / "screen_error.txt").exists()
+        content = (state_dir / "screen_error.txt").read_text(encoding="utf-8")
+        assert "no display" in content
+
+    def test_ensure_test_dir_creates_unknown_when_none(self, tmp_path: Path) -> None:
+        dl = DebugLogger(sessions_root=tmp_path)
+        # Don't call new_test — _test_dir is None.
+        dl._test_dir = None
+        path = dl._ensure_test_dir()
+        assert path.exists()
+        assert "unknown_test" in path.name
+
+    def test_capture_with_element_uia_errors(self, tmp_path: Path) -> None:
+        dl = DebugLogger(sessions_root=tmp_path)
+        dl.new_test("test_uia_error")
+
+        el = MagicMock()
+        el.element_info.control_type = "Button"
+        el.window_text.side_effect = RuntimeError("UIA error")
+        el.is_enabled.return_value = True
+        el.is_visible.return_value = True
+        el.children.return_value = []
+
+        mock_img = MagicMock()
+        with patch("rttr.session_outputs.debug_logger.ImageGrab.grab", return_value=mock_img):
+            state_dir = dl.capture("uia_failure", element=el)
+
+        content = (state_dir / "state.txt").read_text(encoding="utf-8")
+        # The element was passed so _format_tree was called. window_text raises,
+        # so it falls back to empty title.
+        assert "[Button]" in content
+
+    def test_multiple_captures_increment_counter(self, tmp_path: Path) -> None:
+        dl = DebugLogger(sessions_root=tmp_path)
+        dl.new_test("test_multi")
+
+        mock_img = MagicMock()
+        with patch("rttr.session_outputs.debug_logger.ImageGrab.grab", return_value=mock_img):
+            dir1 = dl.capture("first")
+            dir2 = dl.capture("second")
+
+        assert "001_" in dir1.name
+        assert "002_" in dir2.name

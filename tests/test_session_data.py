@@ -6,12 +6,8 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from rttr.session_outputs import _state
-from rttr.session_outputs import session_report
+from rttr.session_outputs import _state, session_report
 from rttr.session_outputs._types import TestResult
-from rttr.hooks import phase_report_key
 
 
 class TestCaptureOutput:
@@ -196,3 +192,191 @@ class TestGenerate:
             # Don't leave our fake template behind.
             if viewer_template.exists():
                 viewer_template.unlink()
+
+    def test_generate_noop_when_no_debug_logger(self) -> None:
+        _state.session.debug_logger = None
+
+        session = MagicMock()
+        session.testsfailed = 0
+        session.testscollected = 0
+        session.items = []
+
+        # Should return without writing anything.
+        session_report.generate(session, exitstatus=0)
+
+    def test_generate_handles_exception_gracefully(self, tmp_path: Path) -> None:
+        dl = MagicMock()
+        dl.session_dir = tmp_path
+        # Intentionally break _generate_session_data by making iterdir() fail.
+        _state.session.debug_logger = dl
+        _state.session.test_outputs.clear()
+        _state.session.collected_nodeids.clear()
+        _state.session.session_log_entries.clear()
+
+        session = MagicMock()
+        session.testsfailed = 0
+        session.testscollected = 0
+        session.items = []
+        session.config._randomly_seed = 1
+
+        # Cause an error by not creating the markers file and making iterdir
+        # raise when scanning for test dirs.
+        with patch.object(Path, "iterdir", side_effect=OSError("perm denied")):
+            session_report.generate(session, exitstatus=0)
+        # Should not raise — best-effort.
+
+    def test_viewer_skipped_when_template_missing(self, tmp_path: Path) -> None:
+        dl = MagicMock()
+        dl.session_dir = tmp_path
+        dl._results = []
+        _state.session.debug_logger = dl
+        _state.session.test_outputs.clear()
+        _state.session.collected_nodeids.clear()
+        _state.session.session_log_entries.clear()
+
+        markers = tmp_path / "session_recording_markers.jsonl"
+        markers.write_text("", encoding="utf-8")
+
+        session = MagicMock()
+        session.testsfailed = 0
+        session.testscollected = 0
+        session.items = []
+        session.config._randomly_seed = 1
+
+        with patch.object(session_report, "_VIEWER_TEMPLATE", tmp_path / "nonexistent.html"):
+            session_report.generate(session, exitstatus=0)
+
+        # session_data.json should exist but not viewer.html.
+        assert (tmp_path / "session_data.json").exists()
+        assert not (tmp_path / "viewer.html").exists()
+
+    def test_failure_dump_from_file(self, tmp_path: Path) -> None:
+        dl = MagicMock()
+        dl.session_dir = tmp_path
+        dl._results = []
+        _state.session.debug_logger = dl
+        _state.session.test_outputs.clear()
+        _state.session.collected_nodeids.clear()
+        _state.session.session_log_entries.clear()
+
+        markers = tmp_path / "session_recording_markers.jsonl"
+        markers.write_text(
+            '{"event":"test_start","test":"test.py::test_widget","video_ts":1.0}\n'
+            '{"event":"test_end","test":"test.py::test_widget","video_ts":3.0,"result":"failed"}\n',
+            encoding="utf-8",
+        )
+
+        # Create a test directory with a failure_dump.txt.
+        test_dir = tmp_path / "001_test_test_widget"
+        test_dir.mkdir()
+        (test_dir / "failure_dump.txt").write_text("dump content here", encoding="utf-8")
+
+        session = MagicMock()
+        session.testsfailed = 1
+        session.testscollected = 1
+        session.items = []
+        session.config._randomly_seed = 1
+
+        with patch.object(session_report, "_VIEWER_TEMPLATE", tmp_path / "no_template.html"):
+            session_report.generate(session, exitstatus=1)
+
+        data = json.loads((tmp_path / "session_data.json").read_text(encoding="utf-8"))
+        failed_test = data["tests"][0]
+        assert failed_test["failure_dump"] == "dump content here"
+
+    def test_frame_paths_included(self, tmp_path: Path) -> None:
+        dl = MagicMock()
+        dl.session_dir = tmp_path
+        dl._results = []
+        _state.session.debug_logger = dl
+        _state.session.test_outputs.clear()
+        _state.session.collected_nodeids.clear()
+        _state.session.session_log_entries.clear()
+
+        markers = tmp_path / "session_recording_markers.jsonl"
+        markers.write_text(
+            '{"event":"test_start","test":"t::fail","video_ts":1.0}\n'
+            '{"event":"test_end","test":"t::fail","video_ts":2.0,"result":"failed"}\n',
+            encoding="utf-8",
+        )
+
+        # Create frame directory matching the slug of "t::fail".
+        import re
+
+        frame_slug = re.sub(r"[^a-zA-Z0-9_]", "_", "t::fail")[:120]
+        frame_dir = tmp_path / "failure_frames" / frame_slug
+        frame_dir.mkdir(parents=True)
+        (frame_dir / "frame_0001.png").write_bytes(b"")
+        (frame_dir / "frame_0002.png").write_bytes(b"")
+
+        session = MagicMock()
+        session.testsfailed = 1
+        session.testscollected = 1
+        session.items = []
+        session.config._randomly_seed = 1
+
+        with patch.object(session_report, "_VIEWER_TEMPLATE", tmp_path / "no_template.html"):
+            session_report.generate(session, exitstatus=1)
+
+        data = json.loads((tmp_path / "session_data.json").read_text(encoding="utf-8"))
+        frames = data["tests"][0]["frames"]
+        assert len(frames) == 2
+        assert "frame_0001.png" in frames[0]
+
+    def test_markers_cleaned_up_after_generation(self, tmp_path: Path) -> None:
+        dl = MagicMock()
+        dl.session_dir = tmp_path
+        dl._results = []
+        _state.session.debug_logger = dl
+        _state.session.test_outputs.clear()
+        _state.session.collected_nodeids.clear()
+        _state.session.session_log_entries.clear()
+
+        markers = tmp_path / "session_recording_markers.jsonl"
+        markers.write_text(
+            '{"event":"test_start","test":"t::a","video_ts":1.0}\n'
+            '{"event":"test_end","test":"t::a","video_ts":2.0,"result":"passed"}\n',
+            encoding="utf-8",
+        )
+
+        session = MagicMock()
+        session.testsfailed = 0
+        session.testscollected = 1
+        session.items = []
+        session.config._randomly_seed = 1
+
+        with patch.object(session_report, "_VIEWER_TEMPLATE", tmp_path / "no_template.html"):
+            session_report.generate(session, exitstatus=0)
+
+        assert not markers.exists()
+
+    def test_handles_blank_lines_and_malformed_json_in_markers(self, tmp_path: Path) -> None:
+        dl = MagicMock()
+        dl.session_dir = tmp_path
+        dl._results = []
+        _state.session.debug_logger = dl
+        _state.session.test_outputs.clear()
+        _state.session.collected_nodeids.clear()
+        _state.session.session_log_entries.clear()
+
+        markers = tmp_path / "session_recording_markers.jsonl"
+        markers.write_text(
+            "\n"
+            "not json at all\n"
+            '{"event":"test_start","test":"t::ok","video_ts":1.0}\n'
+            '{"event":"test_end","test":"t::ok","video_ts":2.0,"result":"passed"}\n',
+            encoding="utf-8",
+        )
+
+        session = MagicMock()
+        session.testsfailed = 0
+        session.testscollected = 1
+        session.items = []
+        session.config._randomly_seed = 1
+
+        with patch.object(session_report, "_VIEWER_TEMPLATE", tmp_path / "no_template.html"):
+            session_report.generate(session, exitstatus=0)
+
+        data = json.loads((tmp_path / "session_data.json").read_text(encoding="utf-8"))
+        assert len(data["tests"]) == 1
+        assert data["tests"][0]["nodeid"] == "t::ok"

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import time
-from unittest.mock import patch
 
 from rttr.session_outputs import _state
 from rttr.session_outputs._logger import SessionLogHandler, attach_log_handler

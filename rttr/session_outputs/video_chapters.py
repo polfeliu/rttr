@@ -11,9 +11,12 @@ import json
 import logging
 import subprocess
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rttr.session_outputs.video_recorder import ffmpeg_available
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 

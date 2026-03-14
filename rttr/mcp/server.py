@@ -164,7 +164,11 @@ def _resolve_element(slot: int) -> BaseWrapper:
 
 
 def _get_app() -> BaseModel:
-    """Return the active application instance."""
+    """Return the active application instance.
+
+    Raises:
+        RuntimeError: If the application class has no ``get_active_instance`` method.
+    """
     get_active = getattr(_AppClass, "get_active_instance", None)
     if get_active is not None:
         return get_active()
@@ -482,7 +486,7 @@ def dump_all() -> dict[str, Any]:
     Note: element handles are NOT embedded in UINode ΓÇô use find_elements to get handles.
     """
     app_inst = _get_app()
-    return {"windows": app_inst.dump_all()}
+    return {"windows": app_inst.dump_all(app_inst.element)}
 
 
 @mcp.tool
