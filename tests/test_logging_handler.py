@@ -6,16 +6,16 @@ import logging
 import time
 from unittest.mock import patch
 
-from rttr import _state
-from rttr.session_data import SessionLogHandler, attach_log_handler
+from rttr.session_outputs import _state
+from rttr.session_outputs._logger import SessionLogHandler, attach_log_handler
 
 
 class TestSessionLogHandler:
     """Verify ``SessionLogHandler.emit`` captures log records."""
 
     def test_appends_to_session_log_entries(self) -> None:
-        _state.session_log_entries.clear()
-        _state.recorder._start_time = time.monotonic() - 5.0
+        _state.session.session_log_entries.clear()
+        _state.session.recorder._start_time = time.monotonic() - 5.0
 
         handler = SessionLogHandler()
         handler.setFormatter(logging.Formatter("%(name)s: %(message)s"))
@@ -32,18 +32,18 @@ class TestSessionLogHandler:
 
         handler.emit(record)
 
-        assert len(_state.session_log_entries) == 1
-        entry = _state.session_log_entries[0]
-        assert entry["level"] == "INFO"
-        assert entry["name"] == "test.logger"
-        assert "Hello world" in entry["msg"]
-        assert isinstance(entry["ts"], float)
-        assert entry["ts"] > 0
+        assert len(_state.session.session_log_entries) == 1
+        entry = _state.session.session_log_entries[0]
+        assert entry.level == "INFO"
+        assert entry.name == "test.logger"
+        assert "Hello world" in entry.msg
+        assert isinstance(entry.ts, float)
+        assert entry.ts > 0
 
     def test_video_ts_zero_when_no_start_time(self) -> None:
-        _state.session_log_entries.clear()
-        old_start = _state.recorder._start_time
-        _state.recorder._start_time = 0.0
+        _state.session.session_log_entries.clear()
+        old_start = _state.session.recorder._start_time
+        _state.session.recorder._start_time = 0.0
 
         handler = SessionLogHandler()
         handler.setFormatter(logging.Formatter("%(message)s"))
@@ -60,9 +60,9 @@ class TestSessionLogHandler:
 
         handler.emit(record)
 
-        assert _state.session_log_entries[-1]["ts"] == 0.0
+        assert _state.session.session_log_entries[-1].ts == 0.0
 
-        _state.recorder._start_time = old_start
+        _state.session.recorder._start_time = old_start
 
 
 class TestAttachLogHandler:

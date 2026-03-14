@@ -1,7 +1,7 @@
 """RTTR — Release The T-Rex.
 
 A pytest plugin that provides screen recording, session data generation,
-emergency-stop hotkeys, and debug logging for MotionLab integration tests.
+emergency-stop hotkeys, and debug logging for GUI integration tests.
 
 This ``__init__`` module acts as the orchestrator: it re-exports simple
 hooks from sub-modules and defines composite hooks that delegate to
@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from rttr import _state, emergency_stop, recording, session_data
+from rttr import emergency_stop
 from rttr.hooks import (
     phase_report_key,
     pytest_addoption,
@@ -27,17 +27,42 @@ from rttr.hooks import (
     pytest_report_header,
     store_phase_report,
 )
+from rttr.session_outputs import _state
+from rttr.session_outputs import (
+    attach_log_handler as _attach_log_handler,
+)
+from rttr.session_outputs import (
+    capture_output as _capture_output,
+)
+from rttr.session_outputs import (
+    generate as _generate_session,
+)
+from rttr.session_outputs import (
+    mark_test_end as _mark_test_end,
+)
+from rttr.session_outputs import (
+    mark_test_start as _mark_test_start,
+)
+from rttr.session_outputs import (
+    start_recording as _start_recording,
+)
+from rttr.session_outputs import (
+    stop_recording as _stop_recording,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Generator
 
     from pytest import CollectReport
 
-    from rttr.session_data import DebugLogger
+    from rttr.session_outputs.debug_logger import DebugLogger
 
 # Public API surface — everything else is internal plugin plumbing.
 __all__ = [
     "phase_report_key",
+    "pytest_addoption",
+    "pytest_collection_modifyitems",
+    "pytest_report_header",
 ]
 
 _logger = logging.getLogger(__name__)
@@ -58,7 +83,7 @@ def _finalise_debug_result(item: pytest.Item) -> None:
     Args:
         item: The pytest Item whose phases are being finalised.
     """
-    dl = _state.debug_logger
+    dl = _state.session.debug_logger
     if dl is None:
         return
 
@@ -91,22 +116,21 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     Args:
         session: The pytest Session object.
     """
-    _state.init_debug_logger()
-    recording.start(session)
-    session_data.attach_log_handler()
+    _state.session.init_debug_logger()
+    _start_recording(session)
+    _attach_log_handler()
     emergency_stop.register()
 
 
-def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:  # noqa: ARG001
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """Stop recording, save metadata, generate session data.
 
     Args:
         session: The pytest Session object.
-        exitstatus: The exit status code (unused directly; failure info
-            is read from ``session.testsfailed``).
+        exitstatus: The exit status code.
     """
-    recording.stop(session)
-    session_data.generate(session)
+    _stop_recording(session)
+    _generate_session(session, exitstatus)
 
 
 @pytest.hookimpl(wrapper=True, tryfirst=True)
@@ -133,10 +157,10 @@ def pytest_runtest_makereport(
 
     # 2. Emit a video marker when the "call" phase finishes.
     if rep.when == "call":
-        recording.mark_test_end(item.nodeid, rep.outcome)
+        _mark_test_end(item.nodeid, rep.outcome)
 
     # 3. Capture per-test output for session_data.json.
-    session_data.capture_output(item.nodeid, rep)
+    _capture_output(item.nodeid, rep)
 
     # 4. After teardown completes, finalise the debug logger for this test.
     #    This records PASSED/FAILED/SKIPPED and discards artifacts on success.
@@ -159,14 +183,14 @@ def pytest_runtest_logstart(
         nodeid: The node ID of the test about to start.
         location: The fspath/lineno/domain tuple (unused).
     """
-    recording.mark_test_start(nodeid)
+    _mark_test_start(nodeid)
 
     # Create a per-test debug directory.  The nodeid is something like
-    # ``motionlab_integration_tests/test_scope.py::test_start_stop``;
-    # extract just the test function name for a cleaner folder name.
+    # ``my_tests/test_foo.py::test_bar``; extract just the test function
+    # name for a cleaner folder name.
     test_name = nodeid.rsplit("::", maxsplit=1)[-1]
-    if _state.debug_logger is not None:
-        _state.debug_logger.new_test(test_name)
+    if _state.session.debug_logger is not None:
+        _state.session.debug_logger.new_test(test_name)
 
 
 # ---------------------------------------------------------------------------
@@ -181,5 +205,7 @@ def debug_logger() -> DebugLogger:
     Returns:
         The instantiated DebugLogger.
     """
-    assert _state.debug_logger is not None, "DebugLogger was not created in pytest_sessionstart"
-    return _state.debug_logger
+    assert _state.session.debug_logger is not None, (
+        "DebugLogger was not created in pytest_sessionstart"
+    )
+    return _state.session.debug_logger

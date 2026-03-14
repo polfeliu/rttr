@@ -1,4 +1,4 @@
-"""Tests for ``rttr.session_data`` — DebugLogger and helper functions."""
+"""Tests for ``rttr.session_outputs.debug_logger`` — DebugLogger and helper functions."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from rttr.session_data import DebugLogger, _format_tree, _slugify
+from rttr.session_outputs.debug_logger import DebugLogger, _format_tree, _slugify
 
 
 class TestSlugify:
@@ -84,13 +84,6 @@ class TestDebugLogger:
         name = dl.session_dir.name
         assert name.startswith("001_session_")
 
-    def test_session_info_written(self, tmp_path: Path) -> None:
-        dl = DebugLogger(sessions_root=tmp_path)
-        info = dl.session_dir / "session_info.md"
-        assert info.exists()
-        content = info.read_text(encoding="utf-8")
-        assert "Test Session Report" in content
-
     def test_new_test_increments_counter(self, tmp_path: Path) -> None:
         dl = DebugLogger(sessions_root=tmp_path)
         dl.new_test("test_alpha")
@@ -122,20 +115,8 @@ class TestDebugLogger:
         dl.record_result("PASSED")
 
         assert len(dl._results) == 1
-        assert dl._results[0]["status"] == "PASSED"
-        assert dl._results[0]["name"] == "test_one"
-
-    def test_record_result_updates_session_info(self, tmp_path: Path) -> None:
-        dl = DebugLogger(sessions_root=tmp_path)
-        dl.new_test("test_pass")
-        dl.record_result("PASSED")
-        dl.new_test("test_fail")
-        dl.record_result("FAILED")
-
-        info = (dl.session_dir / "session_info.md").read_text(encoding="utf-8")
-        assert "PASSED" in info
-        assert "FAILED" in info
-        assert "Tests run:** 2" in info
+        assert dl._results[0].status == "PASSED"
+        assert dl._results[0].name == "test_one"
 
     def test_discard_test_dir_removes_directory(self, tmp_path: Path) -> None:
         dl = DebugLogger(sessions_root=tmp_path)
@@ -159,7 +140,7 @@ class TestDebugLogger:
 
         # Patch ImageGrab to avoid needing a real screen.
         mock_img = MagicMock()
-        with patch("rttr.session_data.ImageGrab.grab", return_value=mock_img):
+        with patch("rttr.session_outputs.debug_logger.ImageGrab.grab", return_value=mock_img):
             state_dir = dl.capture("initial_state")
 
         assert state_dir.exists()
@@ -178,7 +159,7 @@ class TestDebugLogger:
         el.children.return_value = []
 
         mock_img = MagicMock()
-        with patch("rttr.session_data.ImageGrab.grab", return_value=mock_img):
+        with patch("rttr.session_outputs.debug_logger.ImageGrab.grab", return_value=mock_img):
             state_dir = dl.capture("with_element", element=el)
 
         content = (state_dir / "state.txt").read_text(encoding="utf-8")
@@ -189,7 +170,7 @@ class TestDebugLogger:
         dl.new_test("test_no_el")
 
         mock_img = MagicMock()
-        with patch("rttr.session_data.ImageGrab.grab", return_value=mock_img):
+        with patch("rttr.session_outputs.debug_logger.ImageGrab.grab", return_value=mock_img):
             state_dir = dl.capture("no_element", element=None)
 
         content = (state_dir / "state.txt").read_text(encoding="utf-8")

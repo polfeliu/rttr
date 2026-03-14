@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Session Viewer</title>
+<style>
+:root {
+  --bg: #1e1e1e; --bg2: #252526; --bg3: #2d2d2d; --bg4: #3c3c3c;
+  --fg: #cccccc; --fg-dim: #808080; --fg-bright: #ffffff;
+  --green: #4ec9b0; --red: #f44747; --yellow: #dcdcaa; --blue: #569cd6;
+  --orange: #ce9178; --purple: #c586c0;
+  --accent: #007acc; --accent-hover: #1a8ad4;
+  --border: #404040; --scrollbar: #424242; --scrollbar-hover: #555555;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; font:13px/1.5 'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--fg); overflow:hidden; }
+button { font:inherit; background:var(--bg3); color:var(--fg); border:1px solid var(--border); border-radius:3px; padding:2px 8px; cursor:pointer; }
+button:hover { background:var(--bg4); }
+input { font:inherit; background:var(--bg3); color:var(--fg); border:1px solid var(--border); border-radius:3px; padding:2px 6px; }
+::-webkit-scrollbar { width:8px; height:8px; }
+::-webkit-scrollbar-track { background:var(--bg2); }
+::-webkit-scrollbar-thumb { background:var(--scrollbar); border-radius:4px; }
+::-webkit-scrollbar-thumb:hover { background:var(--scrollbar-hover); }
+
+#app { display:grid; grid-template-rows:36px 1fr; grid-template-columns:280px 1fr; height:100vh; }
+#header { grid-column:1/-1; display:flex; align-items:center; gap:12px; padding:0 12px; background:var(--bg2); border-bottom:1px solid var(--border); }
+#header .title { font-weight:600; color:var(--fg-bright); white-space:nowrap; }
+#header .session-name { font-size:12px; color:var(--fg-dim); }
+#header .stats { font-size:12px; color:var(--fg-dim); }
+.stats .pass { color:var(--green); } .stats .fail { color:var(--red); } .stats .skip { color:var(--yellow); } .stats .nr { color:var(--fg-dim); }
+
+#sidebar { overflow-y:auto; background:var(--bg2); border-right:1px solid var(--border); font-size:12px; user-select:none; }
+#sidebar .search-box { padding:4px 6px; border-bottom:1px solid var(--border); }
+#sidebar .search-box input { width:100%; }
+.tree-node { cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tree-node:hover { background:var(--bg3); }
+.tree-node.selected { background:var(--accent); color:var(--fg-bright); }
+.tree-node .icon { display:inline-block; width:16px; text-align:center; margin-right:2px; }
+.tree-node .caret { display:inline-block; width:14px; text-align:center; font-size:10px; transition:transform 0.1s; }
+.tree-node .caret.open { transform:rotate(90deg); }
+.tree-node .caret.leaf { visibility:hidden; }
+.tree-group { overflow:hidden; }
+.tree-group.collapsed { display:none; }
+.tree-node[data-result="passed"] .icon { color:var(--green); }
+.tree-node[data-result="failed"] .icon { color:var(--red); }
+.tree-node[data-result="skipped"] .icon { color:var(--yellow); }
+.tree-node[data-result="not_run"] { color:var(--fg-dim); opacity:0.6; }
+.tree-node[data-result="not_run"] .icon { color:var(--fg-dim); }
+.tree-filter { padding:1px 6px; font-size:10px; border-radius:10px; }
+.tree-filter.active { background:var(--accent); color:var(--fg-bright); border-color:var(--accent); }
+
+#main { display:grid; grid-template-rows:auto 1fr; overflow:hidden; }
+#video-section { display:flex; flex-direction:column; background:var(--bg); border-bottom:1px solid var(--border); }
+#video-container { position:relative; background:#000; }
+#video-container video { display:block; width:100%; max-height:45vh; }
+#video-controls { display:flex; align-items:center; gap:6px; padding:4px 8px; background:var(--bg2); font-size:12px; }
+#video-controls button { padding:1px 6px; font-size:14px; line-height:1; }
+#video-controls .time { color:var(--fg-dim); min-width:80px; }
+
+#timeline { position:relative; height:28px; background:var(--bg3); cursor:pointer; margin:0 8px 4px; border-radius:3px; overflow:hidden; }
+#timeline .segment { position:absolute; top:0; height:100%; opacity:0.4; }
+#timeline .segment.passed { background:var(--green); }
+#timeline .segment.failed { background:var(--red); }
+#timeline .segment.skipped { background:var(--yellow); }
+#timeline .cursor { position:absolute; top:0; width:2px; height:100%; background:var(--fg-bright); pointer-events:none; z-index:2; }
+#timeline .marker { position:absolute; top:0; width:16px; height:100%; z-index:3; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:11px; }
+#timeline .marker.fail-marker { color:var(--red); }
+#timeline .marker.passed-marker { color:var(--green); }
+#timeline .marker.skipped-marker { color:var(--yellow); }
+#timeline .marker.failed-marker { color:var(--red); font-weight:700; }
+#timeline .marker:hover { background:rgba(255,255,255,0.1); }
+
+.failure-overlay { position:fixed; z-index:100; background:var(--bg2); border:1px solid var(--red); border-radius:6px; padding:12px; max-width:600px; max-height:400px; overflow:auto; font-size:12px; box-shadow:0 4px 20px rgba(0,0,0,0.6); }
+.failure-overlay h4 { color:var(--red); margin-bottom:6px; }
+.failure-overlay pre { white-space:pre-wrap; word-break:break-all; color:var(--fg); }
+.failure-overlay .uia-section { margin-top:8px; border-top:1px solid var(--border); padding-top:8px; }
+
+#bottom-panel { display:flex; flex-direction:column; overflow:hidden; }
+#tab-bar { display:flex; gap:0; background:var(--bg2); border-bottom:1px solid var(--border); flex-shrink:0; }
+#tab-bar .tab { padding:4px 14px; cursor:pointer; font-size:12px; border-bottom:2px solid transparent; color:var(--fg-dim); }
+#tab-bar .tab:hover { color:var(--fg); background:var(--bg3); }
+#tab-bar .tab.active { color:var(--fg-bright); border-bottom-color:var(--accent); }
+#tab-content { flex:1; overflow:hidden; position:relative; }
+.tab-pane { display:none; position:absolute; inset:0; overflow:auto; padding:8px 12px; }
+.tab-pane.active { display:block; }
+.tab-pane pre { white-space:pre-wrap; word-break:break-all; font:12px/1.6 'Cascadia Code','Consolas',monospace; }
+
+#log-panel { display:flex; flex-direction:column; height:100%; }
+#log-filters { display:flex; gap:6px; padding:4px 8px; background:var(--bg2); border-bottom:1px solid var(--border); font-size:11px; flex-shrink:0; }
+#log-filters label { display:flex; align-items:center; gap:3px; cursor:pointer; }
+#log-filters input[type="checkbox"] { accent-color:var(--accent); }
+#log-list { flex:1; overflow-y:auto; font:11px/1.5 'Cascadia Code','Consolas',monospace; padding:4px 8px; }
+.log-entry { white-space:pre-wrap; word-break:break-all; padding:0 4px; border-left:3px solid transparent; cursor:pointer; }
+.log-entry:hover { background:var(--bg3); }
+.log-entry.future { opacity:0.35; }
+.log-entry.current-test { border-left-color:var(--accent); }
+.log-entry .log-ts { color:var(--fg-dim); margin-right:6px; }
+.log-entry .log-level { font-weight:600; margin-right:6px; min-width:55px; display:inline-block; }
+.log-entry .log-level.DEBUG { color:var(--fg-dim); }
+.log-entry .log-level.INFO { color:var(--blue); }
+.log-entry .log-level.WARNING { color:var(--orange); }
+.log-entry .log-level.ERROR { color:var(--red); }
+.log-entry .log-level.CRITICAL { color:var(--red); font-weight:800; }
+.log-entry .log-name { color:var(--purple); margin-right:6px; }
+
+#uia-content pre { font:12px/1.6 'Cascadia Code','Consolas',monospace; }
+.uia-ctrl { color:var(--green); font-weight:600; }
+.uia-name { color:var(--orange); }
+.uia-auto { color:var(--blue); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <span class="title">Session Viewer</span>
+    <span class="session-name" id="session-name"></span>
+    <span class="stats" id="stats-bar"></span>
+    <span style="flex:1"></span>
+    <span class="stats" id="test-counter"></span>
+  </div>
+  <div id="sidebar">
+    <div class="search-box"><input id="tree-search" type="text" placeholder="Filter tests..."></div>
+    <div id="tree-filters" style="display:flex;gap:4px;padding:4px 6px;border-bottom:1px solid var(--border);font-size:11px;flex-wrap:wrap;">
+      <button class="tree-filter active" data-filter="all" onclick="setTreeFilter('all')">All</button>
+      <button class="tree-filter" data-filter="run" onclick="setTreeFilter('run')">Run</button>
+      <button class="tree-filter" data-filter="failed" onclick="setTreeFilter('failed')">Failed</button>
+      <button class="tree-filter" data-filter="passed" onclick="setTreeFilter('passed')">Passed</button>
+      <button class="tree-filter" data-filter="skipped" onclick="setTreeFilter('skipped')">Skipped</button>
+      <button class="tree-filter" data-filter="not_run" onclick="setTreeFilter('not_run')">Not run</button>
+    </div>
+    <div id="test-tree"></div>
+  </div>
+  <div id="main">
+    <div id="video-section">
+      <div id="video-container">
+        <video id="video" preload="auto"></video>
+      </div>
+      <div id="video-controls">
+        <button id="btn-prev-test" title="Previous test (Shift+Up)">&#x23EE;</button>
+        <button id="btn-frame-back" title="Previous frame (&larr;)">&#x25C0;</button>
+        <button id="btn-play" title="Play/Pause (Space)">&#x25B6;</button>
+        <button id="btn-frame-fwd" title="Next frame (&rarr;)">&#x25B6;</button>
+        <button id="btn-next-test" title="Next test (Shift+Down)">&#x23ED;</button>
+        <span class="time" id="time-display">0:00 / 0:00</span>
+        <input id="speed-select" type="range" min="0.25" max="4" step="0.25" value="1" title="Playback speed" style="width:80px;">
+        <span id="speed-label" style="font-size:11px;color:var(--fg-dim);">1x</span>
+      </div>
+      <div id="timeline"><div class="cursor" id="timeline-cursor"></div></div>
+    </div>
+    <div id="bottom-panel">
+      <div id="tab-bar">
+        <div class="tab active" data-tab="log">Log</div>
+        <div class="tab" data-tab="traceback">Traceback</div>
+        <div class="tab" data-tab="output">Output</div>
+        <div class="tab" data-tab="uia">UIA Tree</div>
+        <div class="tab" data-tab="state">State Snapshot</div>
+      </div>
+      <div id="tab-content">
+        <div class="tab-pane active" data-tab="log">
+          <div id="log-panel">
+          <div id="log-filters">
+            <label><input type="checkbox" data-level="DEBUG"> DEBUG</label>
+            <label><input type="checkbox" data-level="INFO" checked> INFO</label>
+            <label><input type="checkbox" data-level="WARNING" checked> WARNING</label>
+            <label><input type="checkbox" data-level="ERROR" checked> ERROR</label>
+            <label><input type="checkbox" data-level="CRITICAL" checked> CRITICAL</label>
+            <label style="margin-left:12px;"><input type="checkbox" id="log-autoscroll" checked> Auto-scroll</label>
+            <label><input type="checkbox" id="log-current-test-only"> Current test only</label>
+          </div>
+          <div id="log-list"></div>
+          </div>
+        </div>
+        <div class="tab-pane" data-tab="traceback"><pre id="traceback-content">Select a failed test to see its traceback.</pre></div>
+        <div class="tab-pane" data-tab="output"><pre id="output-content">Select a test to see captured output.</pre></div>
+        <div class="tab-pane" data-tab="uia"><div id="uia-content"><em style="color:var(--fg-dim)">Select a failed test to see the UIA tree dump.</em></div></div>
+        <div class="tab-pane" data-tab="state"><pre id="state-content" style="font:12px/1.6 'Cascadia Code','Consolas',monospace;">Select a failed test to see its state snapshot.</pre></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* Session data is embedded here by conftest.py at generation time.
+   When this template file is used directly, SESSION_DATA is null and
+   the viewer shows a placeholder message. */
+const SESSION_DATA = null;
+
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+var S = {
+  data: null,
+  tests: [],
+  allTests: [],
+  selectedIdx: -1,
+  selectedNodeid: null,
+  fps: 2,
+  videoDuration: 0,
+  logs: [],
+  treeFilter: 'all',
+};
+
+function init() {
+  if (!SESSION_DATA) {
+    document.body.innerHTML = '<p style="padding:40px;color:#f44">No session data embedded. This viewer is generated per-session by conftest.py &mdash; open the <code>viewer.html</code> file inside a debug session directory.</p>';
+    return;
+  }
+  S.data = SESSION_DATA;
+  loadSession();
+}
+
+function loadSession() {
+  const d = S.data;
+  S.allTests = d.tests || [];
+  S.tests = S.allTests.filter(t => t.result !== 'not_run');
+  S.logs = d.logs || [];
+  S.selectedIdx = -1;
+  S.selectedNodeid = null;
+
+  $('#session-name').textContent = d.session_dir || '';
+  $('#stats-bar').innerHTML =
+    '<span class="pass">\u2713' + (d.passed||0) + '</span> ' +
+    '<span class="fail">\u2717' + (d.failed||0) + '</span> ' +
+    '<span class="skip">\u2298' + (d.skipped||0) + '</span> ' +
+    '<span class="nr">\u2013' + (d.not_run||0) + '</span>';
+  updateTestCounter();
+
+  const video = $('#video');
+  video.src = 'session_recording.mp4';
+  video.load();
+  video.onloadedmetadata = () => {
+    S.videoDuration = video.duration;
+    buildTimeline();
+    renderLogs();
+  };
+
+  buildTree();
+  renderLogs();
+}
+
+// ---- Tree sidebar ----
+
+function buildTree() {
+  const tree = {};
+  for (const t of S.allTests) {
+    const parts = t.nodeid.split('::');
+    const file = parts[0] || 'unknown';
+    if (!tree[file]) tree[file] = { classes: {}, bare: [] };
+    if (parts.length === 3) {
+      const cls = parts[1];
+      if (!tree[file].classes[cls]) tree[file].classes[cls] = [];
+      tree[file].classes[cls].push(t);
+    } else {
+      tree[file].bare.push(t);
+    }
+  }
+
+  let html = '';
+  for (const file of Object.keys(tree).sort()) {
+    const node = tree[file];
+    const allInFile = [...node.bare, ...Object.values(node.classes).flat()];
+    const fileResult = worstResult(allInFile);
+    const shortFile = file.split('/').pop();
+    html += '<div class="tree-node" data-result="' + fileResult + '" style="padding-left:4px" onclick="toggleGroup(this)">' +
+      '<span class="caret open">\u25B6</span><span class="icon">' + resultIcon(fileResult) + '</span>' + esc(shortFile) +
+      '</div><div class="tree-group">';
+
+    for (const t of node.bare) {
+      html += testNode(t, t.nodeid.split('::').pop(), 24);
+    }
+
+    for (const cls of Object.keys(node.classes).sort()) {
+      const methods = node.classes[cls];
+      const clsResult = worstResult(methods);
+      html += '<div class="tree-node" data-result="' + clsResult + '" style="padding-left:20px" onclick="toggleGroup(this)">' +
+        '<span class="caret open">\u25B6</span><span class="icon">' + resultIcon(clsResult) + '</span>' + esc(cls) +
+        '</div><div class="tree-group">';
+      for (const t of methods) {
+        html += testNode(t, t.nodeid.split('::').pop(), 40);
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  $('#test-tree').innerHTML = html;
+}
+
+function testNode(t, label, indent) {
+  return '<div class="tree-node" data-result="' + t.result + '" data-nodeid="' + esc(t.nodeid) + '" style="padding-left:' + indent + 'px" onclick="selectTest(this.dataset.nodeid)">' +
+    '<span class="caret leaf">\u25B6</span><span class="icon">' + resultIcon(t.result) + '</span>' + esc(label) + '</div>';
+}
+
+function toggleGroup(el) {
+  const g = el.nextElementSibling;
+  if (!g || !g.classList.contains('tree-group')) return;
+  g.classList.toggle('collapsed');
+  el.querySelector('.caret').classList.toggle('open');
+}
+
+function worstResult(tests) {
+  if (tests.some(t => t.result === 'failed')) return 'failed';
+  if (tests.some(t => t.result === 'passed')) return 'passed';
+  if (tests.some(t => t.result === 'skipped')) return 'skipped';
+  return 'not_run';
+}
+
+function resultIcon(r) {
+  return r === 'passed' ? '\u2713' : r === 'failed' ? '\u2717' : r === 'skipped' ? '\u2298' : '\u2013';
+}
+
+// ---- Test selection ----
+
+function selectTest(nodeid) {
+  S.selectedNodeid = nodeid;
+  S.selectedIdx = S.tests.findIndex(t => t.nodeid === nodeid);
+  const test = S.allTests.find(t => t.nodeid === nodeid);
+
+  $$('#test-tree .tree-node').forEach(n => n.classList.toggle('selected', n.dataset.nodeid === nodeid));
+  updateTestCounter();
+
+  if (test) {
+    $('#traceback-content').textContent = test.traceback || 'No traceback.';
+    $('#output-content').textContent = test.captured_output || 'No captured output.';
+    renderUiaTree(test.failure_dump);
+    renderStateSnapshot(test.state_snapshot);
+    if (test.result !== 'not_run' && test.video_start_s > 0) {
+      $('#video').currentTime = test.video_start_s;
+    }
+  }
+  renderLogs();
+}
+
+function updateTestCounter() {
+  var idx = S.selectedIdx >= 0 ? S.selectedIdx + 1 : 0;
+  $('#test-counter').textContent = idx + ' / ' + S.tests.length;
+}
+
+// ---- Timeline ----
+
+function buildTimeline() {
+  var tl = $('#timeline');
+  tl.querySelectorAll('.segment,.marker').forEach(function(e) { e.remove(); });
+  var dur = S.videoDuration || 1;
+
+  S.tests.forEach(function(t) {
+    var seg = document.createElement('div');
+    seg.className = 'segment ' + t.result;
+    seg.style.left = (t.video_start_s / dur * 100) + '%';
+    seg.style.width = Math.max(0.3, (t.video_end_s - t.video_start_s) / dur * 100) + '%';
+    seg.title = t.nodeid + ' (' + t.result + ')';
+    tl.insertBefore(seg, $('#timeline-cursor'));
+
+    var mk = document.createElement('div');
+    mk.className = 'marker ' + t.result + '-marker';
+    mk.style.left = 'calc(' + (t.video_start_s / dur * 100) + '% - 8px)';
+    mk.textContent = resultIcon(t.result);
+    mk.title = t.nodeid.split('::').pop() + ' (' + t.result + ')';
+    mk.addEventListener('click', function(e) {
+      e.stopPropagation();
+      selectTest(t.nodeid);
+      if (t.result === 'failed') showFailureOverlay(t, e);
+    });
+    if (t.result === 'failed') mk.addEventListener('mouseleave', hideFailureOverlay);
+    tl.appendChild(mk);
+  });
+
+  tl.onclick = function(e) {
+    if (e.target.classList.contains('marker')) return;
+    var rect = tl.getBoundingClientRect();
+    $('#video').currentTime = ((e.clientX - rect.left) / rect.width) * dur;
+  };
+}
+
+// ---- Failure overlay ----
+
+var overlayEl = null;
+function showFailureOverlay(test, event) {
+  hideFailureOverlay();
+  if (!test.traceback && !test.failure_dump) return;
+  overlayEl = document.createElement('div');
+  overlayEl.className = 'failure-overlay';
+  var html = '<h4>\u2717 ' + esc(test.nodeid) + '</h4>';
+  if (test.traceback) html += '<pre>' + esc(test.traceback) + '</pre>';
+  if (test.failure_dump) {
+    var txt = test.failure_dump.length > 3000 ? test.failure_dump.substring(0, 3000) + '\n...(truncated)' : test.failure_dump;
+    html += '<div class="uia-section"><strong>UIA Tree:</strong><pre>' + esc(txt) + '</pre></div>';
+  }
+  if (test.state_snapshot) {
+    var snap = test.state_snapshot.length > 2000 ? test.state_snapshot.substring(0, 2000) + '\n...(truncated)' : test.state_snapshot;
+    html += '<div class="uia-section"><strong>State Snapshot:</strong><pre>' + esc(snap) + '</pre></div>';
+  }
+  overlayEl.innerHTML = html;
+  document.body.appendChild(overlayEl);
+  overlayEl.style.left = Math.min(event.clientX, window.innerWidth - 620) + 'px';
+  overlayEl.style.top = Math.min(event.clientY + 10, window.innerHeight - 420) + 'px';
+}
+function hideFailureOverlay() { if (overlayEl) { overlayEl.remove(); overlayEl = null; } }
+
+// ---- Video sync ----
+
+$('#video').addEventListener('timeupdate', function() {
+  var t = $('#video').currentTime;
+  var dur = S.videoDuration || 1;
+  $('#timeline-cursor').style.left = (t / dur * 100) + '%';
+  $('#time-display').textContent = fmt(t) + ' / ' + fmt(dur);
+  updateLogHighlight(t);
+});
+
+function fmt(s) {
+  var m = Math.floor(s / 60);
+  return m + ':' + Math.floor(s % 60).toString().padStart(2, '0');
+}
+
+// ---- Video controls ----
+
+$('#btn-play').onclick = function() {
+  var v = $('#video');
+  if (v.paused) { v.play(); $('#btn-play').innerHTML = '&#x23F8;'; }
+  else { v.pause(); $('#btn-play').innerHTML = '&#x25B6;'; }
+};
+$('#btn-frame-back').onclick = function() { $('#video').currentTime = Math.max(0, $('#video').currentTime - 1 / S.fps); };
+$('#btn-frame-fwd').onclick = function() { $('#video').currentTime = Math.min(S.videoDuration, $('#video').currentTime + 1 / S.fps); };
+$('#btn-prev-test').onclick = function() { navigateTest(-1); };
+$('#btn-next-test').onclick = function() { navigateTest(1); };
+$('#speed-select').oninput = function(e) {
+  var v = parseFloat(e.target.value);
+  $('#video').playbackRate = v;
+  $('#speed-label').textContent = v + 'x';
+};
+
+function navigateTest(dir) {
+  if (!S.tests.length) return;
+  var idx = Math.max(0, Math.min(S.selectedIdx + dir, S.tests.length - 1));
+  selectTest(S.tests[idx].nodeid);
+}
+
+// ---- Log panel ----
+
+function renderLogs() {
+  var container = $('#log-list');
+  if (!S.logs.length) { container.innerHTML = '<em style="color:var(--fg-dim)">No log entries captured.</em>'; return; }
+
+  var enabledLevels = {};
+  $$('#log-filters input[data-level]').forEach(function(cb) { if (cb.checked) enabledLevels[cb.dataset.level] = true; });
+  var currentOnly = $('#log-current-test-only').checked;
+
+  var filtered = S.logs.filter(function(l) { return enabledLevels[l.level]; });
+
+  if (currentOnly && S.selectedNodeid) {
+    var test = S.tests.find(function(t) { return t.nodeid === S.selectedNodeid; });
+    if (test && test.result !== 'not_run') {
+      filtered = filtered.filter(function(l) { return l.ts >= test.video_start_s && l.ts <= test.video_end_s; });
+    }
+  }
+
+  var frag = document.createDocumentFragment();
+  filtered.forEach(function(l) {
+    var div = document.createElement('div');
+    div.className = 'log-entry';
+    div.dataset.ts = l.ts;
+    div.innerHTML = '<span class="log-ts">' + l.ts.toFixed(1) + 's</span>' +
+      '<span class="log-level ' + esc(l.level) + '">' + esc(l.level) + '</span>' +
+      '<span class="log-name">' + esc(l.name) + '</span>' + esc(l.msg);
+    div.onclick = function() { $('#video').currentTime = l.ts; };
+    frag.appendChild(div);
+  });
+  container.innerHTML = '';
+  container.appendChild(frag);
+}
+
+function updateLogHighlight(videoTime) {
+  var entries = $$('#log-list .log-entry');
+  var lastPast = null;
+  var ct = S.selectedNodeid ? S.tests.find(function(t) { return t.nodeid === S.selectedNodeid; }) : null;
+
+  entries.forEach(function(el) {
+    var ts = parseFloat(el.dataset.ts);
+    el.classList.toggle('future', ts > videoTime);
+    el.classList.toggle('current-test', !!(ct && ct.result !== 'not_run' && ts >= ct.video_start_s && ts <= ct.video_end_s));
+    if (ts <= videoTime) lastPast = el;
+  });
+
+  if ($('#log-autoscroll').checked && lastPast) {
+    lastPast.scrollIntoView({ block: 'center', behavior: 'auto' });
+  }
+}
+
+$$('#log-filters input').forEach(function(cb) { cb.addEventListener('change', renderLogs); });
+
+// ---- Tab switching ----
+
+$$('#tab-bar .tab').forEach(function(tab) {
+  tab.onclick = function() {
+    $$('#tab-bar .tab').forEach(function(t) { t.classList.remove('active'); });
+    tab.classList.add('active');
+    $$('#tab-content .tab-pane').forEach(function(p) { p.classList.toggle('active', p.dataset.tab === tab.dataset.tab); });
+  };
+});
+
+// ---- UIA tree rendering ----
+
+function renderUiaTree(dump) {
+  var c = $('#uia-content');
+  if (!dump) { c.innerHTML = '<em style="color:var(--fg-dim)">No UIA tree dump for this test.</em>'; return; }
+  var highlighted = esc(dump)
+    .replace(/^( *)([\w]+)/gm, function(_, sp, ctrl) { return sp + '<span class="uia-ctrl">' + ctrl + '</span>'; })
+    .replace(/'([^']+)'/g, function(_, name) { return "'" + '<span class="uia-name">' + name + '</span>' + "'"; })
+    .replace(/(AutomationId:\s*)(\S+)/g, function(_, prefix, id) { return prefix + '<span class="uia-auto">' + id + '</span>'; });
+  c.innerHTML = '<pre>' + highlighted + '</pre>';
+}
+
+function renderStateSnapshot(snapshot) {
+  var el = $('#state-content');
+  if (!snapshot) { el.textContent = 'No state snapshot for this test.'; return; }
+  try {
+    var obj = JSON.parse(snapshot);
+    el.textContent = JSON.stringify(obj, null, 2);
+  } catch(e) {
+    el.textContent = snapshot;
+  }
+}
+
+// ---- Search/filter ----
+
+function setTreeFilter(filter) {
+  S.treeFilter = filter;
+  $$('#tree-filters .tree-filter').forEach(function(b) { b.classList.toggle('active', b.dataset.filter === filter); });
+  applyTreeFilters();
+}
+
+function applyTreeFilters() {
+  var q = $('#tree-search').value.toLowerCase();
+  var filter = S.treeFilter;
+
+  $$('#test-tree .tree-node[data-nodeid]').forEach(function(n) {
+    var matchesText = !q || n.dataset.nodeid.toLowerCase().indexOf(q) >= 0;
+    var result = n.dataset.result;
+    var matchesFilter = filter === 'all' ||
+      (filter === 'run' && result !== 'not_run') ||
+      (filter === result);
+    n.style.display = (matchesText && matchesFilter) ? '' : 'none';
+  });
+
+  $$('#test-tree .tree-group').forEach(function(g) {
+    var hasVisible = false;
+    g.querySelectorAll('.tree-node[data-nodeid]').forEach(function(n) { if (n.style.display !== 'none') hasVisible = true; });
+    var parent = g.previousElementSibling;
+    if (parent) parent.style.display = hasVisible ? '' : 'none';
+    if (hasVisible && (q || filter !== 'all')) g.classList.remove('collapsed');
+  });
+}
+
+$('#tree-search').addEventListener('input', applyTreeFilters);
+
+// ---- Keyboard shortcuts ----
+
+document.addEventListener('keydown', function(e) {
+  if (e.target.tagName === 'INPUT') return;
+  var v = $('#video');
+  switch (e.key) {
+    case ' ': e.preventDefault(); $('#btn-play').click(); break;
+    case 'ArrowLeft': e.preventDefault(); v.currentTime = Math.max(0, v.currentTime - 1 / S.fps); break;
+    case 'ArrowRight': e.preventDefault(); v.currentTime = Math.min(S.videoDuration, v.currentTime + 1 / S.fps); break;
+    case 'ArrowUp': e.preventDefault(); navigateTest(-1); break;
+    case 'ArrowDown': e.preventDefault(); navigateTest(1); break;
+    case 'j': navigateTest(1); break;
+    case 'k': navigateTest(-1); break;
+    case 'Home': e.preventDefault(); v.currentTime = 0; break;
+    case 'End': e.preventDefault(); v.currentTime = S.videoDuration; break;
+  }
+});
+
+// ---- Utility ----
+
+function esc(s) {
+  if (typeof s !== 'string') return '';
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+init();
+</script>
+</body>
+</html>

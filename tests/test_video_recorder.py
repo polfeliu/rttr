@@ -7,16 +7,20 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from rttr.video_recorder import (
+from rttr.session_outputs.video_recorder import (
     SessionRecorder,
-    _build_chapters,
-    _extract_frames,
-    _ffmpeg_available,
-    _parse_failed_test_ranges,
     _primary_monitor_size,
-    _test_slug,
+    ffmpeg_available,
+)
+from rttr.session_outputs.video_chapters import (
+    _build_chapters,
     _write_ffmetadata,
     embed_test_chapters,
+)
+from rttr.session_outputs.test_outputs.failure_frames import (
+    _extract_frames,
+    _parse_failed_test_ranges,
+    _test_slug,
     extract_failure_frames,
     extract_frames_at,
 )
@@ -47,7 +51,7 @@ class TestSessionRecorderStartNoFfmpeg:
 
     def test_returns_false_when_ffmpeg_missing(self, tmp_path: Path) -> None:
         rec = SessionRecorder()
-        with patch("rttr.video_recorder._ffmpeg_available", return_value=False):
+        with patch("rttr.session_outputs.video_recorder.ffmpeg_available", return_value=False):
             result = rec.start(tmp_path)
         assert result is False
         assert not rec.is_recording
@@ -120,7 +124,6 @@ class TestSessionRecorderStop:
         proc.stdin = MagicMock()
         proc.pid = 12345
         rec._process = proc
-        rec._stderr_fh = MagicMock()
 
         rec.stop()
 
@@ -131,7 +134,6 @@ class TestSessionRecorderStop:
         rec = SessionRecorder()
         proc = MagicMock()
         rec._process = proc
-        rec._stderr_fh = MagicMock()
 
         rec.kill()
 
@@ -164,15 +166,15 @@ class TestSessionRecorderCleanup:
 
 
 class TestFfmpegAvailable:
-    """Verify ``_ffmpeg_available`` detects ffmpeg."""
+    """Verify ``ffmpeg_available`` detects ffmpeg."""
 
     def test_returns_true_when_found(self) -> None:
-        with patch("rttr.video_recorder.shutil.which", return_value="/usr/bin/ffmpeg"):
-            assert _ffmpeg_available() is True
+        with patch("rttr.session_outputs.video_recorder.shutil.which", return_value="/usr/bin/ffmpeg"):
+            assert ffmpeg_available() is True
 
     def test_returns_false_when_missing(self) -> None:
-        with patch("rttr.video_recorder.shutil.which", return_value=None):
-            assert _ffmpeg_available() is False
+        with patch("rttr.session_outputs.video_recorder.shutil.which", return_value=None):
+            assert ffmpeg_available() is False
 
 
 class TestPrimaryMonitorSize:
@@ -184,7 +186,7 @@ class TestPrimaryMonitorSize:
         assert len(result) == 2
 
     def test_fallback_on_non_windows(self) -> None:
-        with patch("rttr.video_recorder.sys.platform", "linux"):
+        with patch("rttr.session_outputs.video_recorder.sys.platform", "linux"):
             assert _primary_monitor_size() == (0, 0)
 
 
@@ -306,7 +308,7 @@ class TestEmbedTestChapters:
             '{"event":"test_end","test":"t::a","video_ts":2.0,"result":"passed"}\n',
             encoding="utf-8",
         )
-        with patch("rttr.video_recorder._ffmpeg_available", return_value=False):
+        with patch("rttr.session_outputs.video_chapters.ffmpeg_available", return_value=False):
             assert embed_test_chapters(video, markers) is False
 
     def test_returns_false_when_no_chapters(self, tmp_path: Path) -> None:
@@ -314,7 +316,7 @@ class TestEmbedTestChapters:
         markers = tmp_path / "markers.jsonl"
         video.write_bytes(b"data")
         markers.write_text("", encoding="utf-8")
-        with patch("rttr.video_recorder._ffmpeg_available", return_value=True):
+        with patch("rttr.session_outputs.video_chapters.ffmpeg_available", return_value=True):
             assert embed_test_chapters(video, markers) is False
 
     def test_calls_remux_on_success(self, tmp_path: Path) -> None:
@@ -327,8 +329,8 @@ class TestEmbedTestChapters:
             encoding="utf-8",
         )
         with (
-            patch("rttr.video_recorder._ffmpeg_available", return_value=True),
-            patch("rttr.video_recorder._remux_with_chapters", return_value=True) as mock_remux,
+            patch("rttr.session_outputs.video_chapters.ffmpeg_available", return_value=True),
+            patch("rttr.session_outputs.video_chapters._remux_with_chapters", return_value=True) as mock_remux,
         ):
             result = embed_test_chapters(video, markers)
         assert result is True
@@ -348,7 +350,7 @@ class TestExtractFailureFrames:
         markers = tmp_path / "markers.jsonl"
         video.write_bytes(b"data")
         markers.write_text("{}", encoding="utf-8")
-        with patch("rttr.video_recorder._ffmpeg_available", return_value=False):
+        with patch("rttr.session_outputs.test_outputs.failure_frames.ffmpeg_available", return_value=False):
             assert extract_failure_frames(video, markers, tmp_path / "out") == {}
 
     def test_returns_empty_when_no_failures(self, tmp_path: Path) -> None:
@@ -360,7 +362,7 @@ class TestExtractFailureFrames:
             '{"event":"test_end","test":"t::a","video_ts":2.0,"result":"passed"}\n',
             encoding="utf-8",
         )
-        with patch("rttr.video_recorder._ffmpeg_available", return_value=True):
+        with patch("rttr.session_outputs.test_outputs.failure_frames.ffmpeg_available", return_value=True):
             assert extract_failure_frames(video, markers, tmp_path / "out") == {}
 
     def test_extracts_for_failed_tests(self, tmp_path: Path) -> None:
@@ -374,8 +376,8 @@ class TestExtractFailureFrames:
         )
         fake_frames = [tmp_path / "frame_0001.png"]
         with (
-            patch("rttr.video_recorder._ffmpeg_available", return_value=True),
-            patch("rttr.video_recorder._extract_frames", return_value=fake_frames) as mock_extract,
+            patch("rttr.session_outputs.test_outputs.failure_frames.ffmpeg_available", return_value=True),
+            patch("rttr.session_outputs.test_outputs.failure_frames._extract_frames", return_value=fake_frames) as mock_extract,
         ):
             result = extract_failure_frames(video, markers, tmp_path / "out")
         assert "t::fail" in result
@@ -394,8 +396,8 @@ class TestExtractFramesAt:
         video.write_bytes(b"data")
         fake = [tmp_path / "f1.png"]
         with (
-            patch("rttr.video_recorder._ffmpeg_available", return_value=True),
-            patch("rttr.video_recorder._extract_frames", return_value=fake) as mock,
+            patch("rttr.session_outputs.test_outputs.failure_frames.ffmpeg_available", return_value=True),
+            patch("rttr.session_outputs.test_outputs.failure_frames._extract_frames", return_value=fake) as mock,
         ):
             result = extract_frames_at(video, tmp_path / "out", 10.0, window_s=4.0)
         assert result == fake
@@ -414,7 +416,7 @@ class TestExtractFrames:
         frame_dir = tmp_path / "frames"
         frame_dir.mkdir()
 
-        with patch("rttr.video_recorder.subprocess.run") as mock_run:
+        with patch("rttr.session_outputs.video_recorder.subprocess.run") as mock_run:
             _extract_frames(video, frame_dir, 1.0, 3.0)
 
         mock_run.assert_called_once()
@@ -428,7 +430,7 @@ class TestExtractFrames:
         frame_dir = tmp_path / "frames"
         frame_dir.mkdir()
 
-        with patch("rttr.video_recorder.subprocess.run", side_effect=OSError("nope")):
+        with patch("rttr.session_outputs.video_recorder.subprocess.run", side_effect=OSError("nope")):
             result = _extract_frames(video, frame_dir, 1.0, 3.0)
         assert result == []
 
@@ -438,7 +440,7 @@ class TestExtractFrames:
         frame_dir.mkdir()
 
         with patch(
-            "rttr.video_recorder.subprocess.run",
+            "rttr.session_outputs.video_recorder.subprocess.run",
             side_effect=subprocess.TimeoutExpired(cmd="ffmpeg", timeout=30),
         ):
             result = _extract_frames(video, frame_dir, 1.0, 3.0)
@@ -455,9 +457,9 @@ class TestSessionRecorderStart:
         proc.pid = 99999
 
         with (
-            patch("rttr.video_recorder._ffmpeg_available", return_value=True),
-            patch("rttr.video_recorder.subprocess.Popen", return_value=proc),
-            patch("rttr.video_recorder.time.sleep"),  # skip the 1.5s delay
+            patch("rttr.session_outputs.video_recorder.ffmpeg_available", return_value=True),
+            patch("rttr.session_outputs.video_recorder.subprocess.Popen", return_value=proc),
+            patch("rttr.session_outputs.video_recorder.time.sleep"),  # skip the 1.5s delay
         ):
             result = rec.start(tmp_path)
 
@@ -472,9 +474,9 @@ class TestSessionRecorderStart:
         proc.returncode = 1
 
         with (
-            patch("rttr.video_recorder._ffmpeg_available", return_value=True),
-            patch("rttr.video_recorder.subprocess.Popen", return_value=proc),
-            patch("rttr.video_recorder.time.sleep"),
+            patch("rttr.session_outputs.video_recorder.ffmpeg_available", return_value=True),
+            patch("rttr.session_outputs.video_recorder.subprocess.Popen", return_value=proc),
+            patch("rttr.session_outputs.video_recorder.time.sleep"),
         ):
             result = rec.start(tmp_path)
 
@@ -485,9 +487,9 @@ class TestSessionRecorderStart:
         rec = SessionRecorder()
 
         with (
-            patch("rttr.video_recorder._ffmpeg_available", return_value=True),
-            patch("rttr.video_recorder.subprocess.Popen", side_effect=FileNotFoundError),
-            patch("rttr.video_recorder.time.sleep"),
+            patch("rttr.session_outputs.video_recorder.ffmpeg_available", return_value=True),
+            patch("rttr.session_outputs.video_recorder.subprocess.Popen", side_effect=FileNotFoundError),
+            patch("rttr.session_outputs.video_recorder.time.sleep"),
         ):
             result = rec.start(tmp_path)
 
@@ -497,9 +499,9 @@ class TestSessionRecorderStart:
         rec = SessionRecorder()
 
         with (
-            patch("rttr.video_recorder._ffmpeg_available", return_value=True),
-            patch("rttr.video_recorder.subprocess.Popen", side_effect=OSError("access denied")),
-            patch("rttr.video_recorder.time.sleep"),
+            patch("rttr.session_outputs.video_recorder.ffmpeg_available", return_value=True),
+            patch("rttr.session_outputs.video_recorder.subprocess.Popen", side_effect=OSError("access denied")),
+            patch("rttr.session_outputs.video_recorder.time.sleep"),
         ):
             result = rec.start(tmp_path)
 

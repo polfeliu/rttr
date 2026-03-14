@@ -11,3 +11,5 @@ build/
 .coverage
 htmlcov/
 debug_sessions/
+.vscode/
+.venv/

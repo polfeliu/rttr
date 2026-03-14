@@ -136,7 +136,7 @@ class TestDebugLoggerFixture:
         pytester.makepyfile(
             """
             def test_has_logger(debug_logger):
-                from rttr.session_data import DebugLogger
+                from rttr.session_outputs.debug_logger import DebugLogger
                 assert isinstance(debug_logger, DebugLogger)
             """
         )

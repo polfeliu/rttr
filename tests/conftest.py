@@ -26,20 +26,20 @@ def _isolate_state() -> Generator[None]:
     """
     from rttr import _state
 
-    old_dl = _state.debug_logger
-    old_outputs = _state.test_outputs.copy()
-    old_nodeids = _state.collected_nodeids.copy()
-    old_logs = _state.session_log_entries.copy()
+    old_dl = _state.session.debug_logger
+    old_outputs = _state.session.test_outputs.copy()
+    old_nodeids = _state.session.collected_nodeids.copy()
+    old_logs = _state.session.session_log_entries.copy()
 
     yield
 
-    _state.debug_logger = old_dl
-    _state.test_outputs.clear()
-    _state.test_outputs.update(old_outputs)
-    _state.collected_nodeids.clear()
-    _state.collected_nodeids.extend(old_nodeids)
-    _state.session_log_entries.clear()
-    _state.session_log_entries.extend(old_logs)
+    _state.session.debug_logger = old_dl
+    _state.session.test_outputs.clear()
+    _state.session.test_outputs.update(old_outputs)
+    _state.session.collected_nodeids.clear()
+    _state.session.collected_nodeids.extend(old_nodeids)
+    _state.session.session_log_entries.clear()
+    _state.session.session_log_entries.extend(old_logs)
 
 
 @pytest.fixture()
@@ -56,6 +56,6 @@ def mock_recorder() -> MagicMock:
     rec = MagicMock()
     rec._start_time = 100.0
     rec.is_recording = True
-    with patch("rttr._state.recorder", rec):
+    with patch("rttr.session_outputs._state.session.recorder", rec):
         yield rec
 

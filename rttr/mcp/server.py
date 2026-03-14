@@ -7,6 +7,7 @@ import io
 import json
 import logging
 import logging.handlers
+import os
 import re
 import subprocess
 import sys
@@ -22,11 +23,27 @@ from fastmcp import FastMCP
 from pywinauto import Desktop
 from pywinauto.keyboard import send_keys as pw_send_keys
 
-from motionlab_integration_tests.pom.app import MotionLabApp
-from rttr.base import UIA_ERRORS
+from rttr.base import UIA_ERRORS, BaseModel
 
 if TYPE_CHECKING:
     from pywinauto.base_wrapper import BaseWrapper
+
+# ---------------------------------------------------------------------------
+# Dynamic app class loading
+# ---------------------------------------------------------------------------
+# Set RTTR_APP_MODULE to "module.path:ClassName" to specify the application
+# class.  Falls back to a BaseModel stub if not set.
+
+_APP_SPEC = os.environ.get("RTTR_APP_MODULE", "")
+_AppClass: type[BaseModel] = BaseModel  # default, overridden below
+
+if _APP_SPEC:
+    _mod_path, _, _cls_name = _APP_SPEC.partition(":")
+    if _mod_path and _cls_name:
+        import importlib
+
+        _app_mod = importlib.import_module(_mod_path)
+        _AppClass = getattr(_app_mod, _cls_name)
 
 # ---------------------------------------------------------------------------
 # Server-level logging
@@ -41,7 +58,7 @@ def _setup_server_logger() -> logging.Logger:
     Returns:
         Configured Logger instance writing to .github/logs/mcp_server.log.
     """
-    _log = logging.getLogger("motionlab_mcp")
+    _log = logging.getLogger("rttr_mcp")
     if _log.handlers:
         return _log  # Already configured (e.g. on re-import in tests)
     _log.setLevel(logging.DEBUG)
@@ -146,13 +163,19 @@ def _resolve_element(slot: int) -> BaseWrapper:
     return el
 
 
-def _get_motionlab_app() -> MotionLabApp:
-    """Return the active MotionLab app instance."""
-    return MotionLabApp.get_active_instance()
+def _get_app() -> BaseModel:
+    """Return the active application instance."""
+    get_active = getattr(_AppClass, "get_active_instance", None)
+    if get_active is not None:
+        return get_active()
+    raise RuntimeError(
+        f"{_AppClass.__name__} has no get_active_instance() classmethod. "
+        "Launch the application first via app_launch."
+    )
 
 
-def _all_process_windows(app_inst: MotionLabApp) -> list[Any]:
-    """Return all top-level windows belonging to the MotionLab process.
+def _all_process_windows(app_inst: BaseModel) -> list[Any]:
+    """Return all top-level windows belonging to the application process.
 
     Returns:
         List of pywinauto window wrappers.
@@ -245,8 +268,11 @@ class PomEphemeralServer:
         virtual-environment packages are found.
         """
         worker = Path(__file__).parent / "pom_worker.py"
+        cmd = [sys.executable, str(worker)]
+        if _APP_SPEC:
+            cmd.append(_APP_SPEC)
         self._proc = subprocess.Popen(
-            [sys.executable, str(worker)],
+            cmd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -372,7 +398,8 @@ def _get_activity_session_file(agent: str) -> Path:
 # ---------------------------------------------------------------------------
 
 
-mcp = FastMCP(name="MotionLabMCP")
+_mcp_name = os.environ.get("RTTR_MCP_NAME", "RTTR_MCP")
+mcp = FastMCP(name=_mcp_name)
 
 
 # ---------------------------------------------------------------------------
@@ -383,17 +410,17 @@ mcp = FastMCP(name="MotionLabMCP")
 @mcp.tool
 @_log_tool
 def app_launch(
-    app_path: str = r"C:\Program Files (x86)\MotionLab3\motionlab.exe",
+    app_path: str = "",
 ) -> dict[str, Any]:
-    """Launch MotionLab or connect to an already-running instance.
+    """Launch the application or connect to an already-running instance.
 
-    If MotionLab is already running this tool simply attaches to it and
+    If the application is already running this tool simply attaches to it and
     returns immediately.  If it is not running, the executable at
     ``app_path`` is started and the tool waits until the main window is
     ready before returning.
 
     Args:
-        app_path: File system path to the MotionLab executable.  Only used
+        app_path: File system path to the application executable.  Only used
             when the process is not already running.
 
     Returns:
@@ -404,15 +431,20 @@ def app_launch(
             within the startup timeout.
     """
     pythoncom.CoInitialize()
-    app_inst = MotionLabApp(app_path=app_path)
-    app_inst.launch_or_connect()
-    return {"ok": True, "message": "MotionLab is running."}
+    kwargs: dict[str, Any] = {}
+    if app_path:
+        kwargs["app_path"] = app_path
+    app_inst = _AppClass(**kwargs)
+    launch_fn = getattr(app_inst, "launch_or_connect", None)
+    if launch_fn is not None:
+        launch_fn()
+    return {"ok": True, "message": f"{_AppClass.__name__} is running."}
 
 
 @mcp.tool
 @_log_tool
 def app_stop() -> dict[str, Any]:
-    """Close the MotionLab application.
+    """Close the application.
 
     Sends a graceful close request to the main window first.  If the
     process is still alive after a short wait it is forcibly killed.
@@ -421,12 +453,16 @@ def app_stop() -> dict[str, Any]:
         Dict with ``ok`` (True) and a human-readable ``message``.
 
     Raises:
-        RuntimeError: If no running MotionLab instance can be found.
+        RuntimeError: If no running application instance can be found.
     """
     pythoncom.CoInitialize()
-    app_inst = _get_motionlab_app()
-    app_inst.stop()
-    return {"ok": True, "message": "MotionLab has been stopped."}
+    app_inst = _get_app()
+    stop_fn = getattr(app_inst, "stop", None)
+    if stop_fn is not None:
+        stop_fn()
+    else:
+        raise RuntimeError(f"{_AppClass.__name__} has no stop() method.")
+    return {"ok": True, "message": f"{_AppClass.__name__} has been stopped."}
 
 
 # ---------------------------------------------------------------------------
@@ -437,7 +473,7 @@ def app_stop() -> dict[str, Any]:
 @mcp.tool
 @_log_tool
 def dump_all() -> dict[str, Any]:
-    """Return structured JSON trees for all top-level MotionLab windows.
+    """Return structured JSON trees for all top-level application windows.
 
     Each entry contains handle, title, class_name and a recursive UINode tree.
     UINode fields: control_type, class_name, title, auto_id, is_visible, is_enabled,
@@ -445,21 +481,21 @@ def dump_all() -> dict[str, Any]:
 
     Note: element handles are NOT embedded in UINode ΓÇô use find_elements to get handles.
     """
-    app_inst = _get_motionlab_app()
+    app_inst = _get_app()
     return {"windows": app_inst.dump_all()}
 
 
 @mcp.tool
 @_log_tool
 def list_windows() -> list[dict[str, Any]]:
-    """Return a list of all top-level windows belonging to the MotionLab process.
+    """Return a list of all top-level windows belonging to the application process.
 
     Includes the main window and any dialogs/popups currently open.
 
     Returns:
         List of dicts, each with handle, title, class_name, process_id, and rect keys.
     """
-    app_inst = _get_motionlab_app()
+    app_inst = _get_app()
     result = []
     for w in _all_process_windows(app_inst):
         try:
@@ -487,7 +523,7 @@ def find_elements(
     enabled_only: bool = False,
     visible_only: bool = True,
 ) -> list[dict[str, Any]]:
-    """Search for UI elements across all MotionLab windows matching the given criteria.
+    """Search for UI elements across all application windows matching the given criteria.
 
     All criteria are optional and ANDed together.
     The handle can be used with click_control, element_info, get_value, type_text, etc.
@@ -511,7 +547,7 @@ def find_elements(
         find_elements(control_type="Edit")            # all text inputs
         find_elements(class_name="QComboBox")         # all combo boxes
     """
-    app_inst = _get_motionlab_app()
+    app_inst = _get_app()
     compiled_re = re.compile(title_re) if title_re else None
     matches = []
 
@@ -612,7 +648,7 @@ def element_info(handle: int) -> dict[str, Any]:
 @mcp.tool
 @_log_tool
 def screenshot() -> dict[str, Any]:
-    """Capture a screenshot of the entire MotionLab main window as a base64 PNG.
+    """Capture a screenshot of the entire application main window as a base64 PNG.
 
     Use this to visually confirm the current state of the application after
     performing interactions, or to orient yourself before starting exploration.
@@ -621,15 +657,15 @@ def screenshot() -> dict[str, Any]:
         Dict with a ``png_base64`` key containing the base64-encoded PNG image.
 
     Raises:
-        RuntimeError: If no MotionLab windows can be found.
+        RuntimeError: If no application windows can be found.
     """
-    app_inst = _get_motionlab_app()
+    app_inst = _get_app()
     try:
         img = app_inst.element.capture_as_image()
     except UIA_ERRORS:
         wins = _all_process_windows(app_inst)
         if not wins:
-            raise RuntimeError("No MotionLab windows found")
+            raise RuntimeError("No application windows found")
         img = wins[0].capture_as_image()
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -671,7 +707,7 @@ def screenshot_window(handle: int) -> dict[str, Any]:
 def click_control(handle: int) -> dict[str, Any]:
     """Click a UI element identified by its handle.
 
-    Searches all MotionLab windows (including dialogs) for the element and
+    Searches all application windows (including dialogs) for the element and
     performs a human-like click using click_input(). Waits 0.5s after clicking
     for the UI to settle.
 
@@ -936,7 +972,7 @@ def class_name_tree(max_depth: int = 10) -> str:
         A plain-text indented tree where each line is
         ``<indent><class_name>  '<title>'``.
     """
-    app_inst = _get_motionlab_app()
+    app_inst = _get_app()
     lines: list[str] = []
 
     def _walk(el: BaseWrapper, depth: int) -> None:
@@ -984,9 +1020,9 @@ def pom_reload() -> dict[str, Any]:
 @mcp.tool
 @_log_tool
 def pom_list_widgets() -> list[str]:
-    """List the POM widget names available on the MotionLab app.
+    """List the POM widget names available on the application.
 
-    These names correspond to ``@property`` accessors on ``MotionLabApp`` that
+    These names correspond to ``@property`` accessors on the app class that
     return a POM widget object.  Pass one of these names to
     ``pom_list_methods`` or ``pom_call``.
 
@@ -1069,7 +1105,7 @@ def pom_chain(steps: list[dict[str, Any]]) -> Any:  # noqa: ANN401 ΓÇö dynami
 
     Lets you traverse nested POM objects without needing top-level widget
     shortcuts.  Each step resolves one attribute or method on the object
-    returned by the previous step, starting from ``MotionLabApp``.
+    returned by the previous step, starting from the app class.
 
     Step schema:
 

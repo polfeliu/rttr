@@ -25,8 +25,15 @@ import pythoncom
 # Dynamic app class loading from CLI argument
 # ---------------------------------------------------------------------------
 
-_DEFAULT_APP_SPEC = "motionlab_integration_tests.pom.app:MotionLabApp"
+_DEFAULT_APP_SPEC = ""
 _app_spec = sys.argv[1] if len(sys.argv) > 1 else _DEFAULT_APP_SPEC
+
+if not _app_spec:
+    print(
+        json.dumps({"ok": False, "error": "No app spec provided. Pass module:Class as argv[1]."}),
+        flush=True,
+    )
+    sys.exit(1)
 
 _module_path, _, _class_name = _app_spec.partition(":")
 _app_module = importlib.import_module(_module_path)
@@ -167,9 +174,7 @@ def _handle_pom_call(payload: dict[str, Any]) -> Any:  # noqa: ANN401
         )
     method_fn = getattr(widget_obj, method_name, None)
     if method_fn is None or not callable(method_fn):
-        raise RuntimeError(
-            f"Unknown method '{method_name}' on widget '{widget_name}'."
-        )
+        raise RuntimeError(f"Unknown method '{method_name}' on widget '{widget_name}'.")
     return _serialise(method_fn(**kwargs))
 
 
@@ -192,9 +197,7 @@ def _handle_pom_chain(payload: dict[str, Any]) -> Any:  # noqa: ANN401
 
         attr = getattr(current, name, _MISSING)
         if attr is _MISSING:
-            raise RuntimeError(
-                f"Step {i}: {type(current).__name__!r} has no attribute {name!r}"
-            )
+            raise RuntimeError(f"Step {i}: {type(current).__name__!r} has no attribute {name!r}")
         if has_kwargs:
             if not callable(attr):
                 raise RuntimeError(

@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from pytest import CollectReport, StashKey
 
-from rttr import _state
+from rttr.session_outputs import _state
 
 # ---------------------------------------------------------------------------
 # Stash key used to expose per-phase reports to fixtures and other hooks
@@ -75,8 +75,8 @@ def pytest_collection_modifyitems(
         config: The pytest Config object (unused).
         items: The collected test items.
     """
-    _state.collected_nodeids.clear()
-    _state.collected_nodeids.extend(item.nodeid for item in items)
+    _state.session.collected_nodeids.clear()
+    _state.session.collected_nodeids.extend(item.nodeid for item in items)
 
     for item in items:
         if not item.get_closest_marker("timeout"):

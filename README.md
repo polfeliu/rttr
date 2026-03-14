@@ -13,20 +13,18 @@ Built on top of **pywinauto** (UIA backend) and **pytest**, RTTR gives you:
 - A **session viewer** (standalone HTML) for replaying test runs in the browser, correlated with video
 - **Emergency stop** (F10) to abort test runs safely
 
-RTTR is designed to be **application-agnostic**: the MCP server and POM base
-class are parameterized, so you bring your own application class and POM
-hierarchy. The framework handles the lifecycle, recording, debugging, and
+RTTR is designed to be **application-agnostic**: the POM base class, pytest
+plugin, and MCP server are generic — you bring your own application class and
+POM hierarchy. The framework handles the lifecycle, recording, debugging, and
 tooling around it.
 
 ---
 
 ## Quick start
 
-Register the RTTR pytest plugin in your `conftest.py`:
-
-```python
-pytest_plugins = ["rttr"]
-```
+Install RTTR as a dependency in your test project (`pip install -e ../rttr`).
+The pytest plugin registers automatically via the `pytest11` entry point — no
+manual configuration needed.
 
 Create your application POM by extending `rttr.base.BaseModel`:
 
@@ -52,10 +50,13 @@ def test_button_click(app: MyApp, debug_logger):
 | Feature | Module | Description |
 |---|---|---|
 | **POM base class** | `base.py` | `BaseModel` with `find_element()`, `click()`, `wait_visible()`, `wait_enabled()`, `dump_state()`, and more. |
-| **Screen recording** | `recording.py`, `video_recorder.py` | Records the desktop via ffmpeg (2 FPS, H.264). Each test gets a chapter marker in the MP4. |
-| **Failure frames** | `video_recorder.py` | Extracts PNG frames around failed tests for visual diagnosis. |
-| **Debug logger** | `debug_logger.py` | Creates per-session and per-test directories with UI tree dumps and screenshots. |
-| **Session data** | `session_data.py` | Collects all session data — test results, tracebacks, captured output, video-synced log entries — into `session_data.json` and a standalone `viewer.html`. |
+| **Screen recording** | `session_outputs/video_recorder.py` | Records the desktop via ffmpeg (2 FPS, H.264). Each test gets a chapter marker in the MP4. |
+| **Chapter embedding** | `session_outputs/video_chapters.py` | Embeds per-test chapter markers into the MP4 after recording. |
+| **Failure frames** | `session_outputs/test_outputs/failure_frames.py` | Extracts PNG frames around failed tests for visual diagnosis. |
+| **Debug logger** | `session_outputs/debug_logger.py` | Creates per-session and per-test directories with UI tree dumps and screenshots. |
+| **Session report** | `session_outputs/session_report.py` | Collects all session data — test results, tracebacks, captured output, video-synced log entries — into `session_data.json` and a standalone `viewer.html`. |
+| **Session state** | `session_outputs/_state.py` | `SessionState` class encapsulating all mutable session state (recorder, debug_logger, test_outputs, collected_nodeids, log entries). |
+| **Typed containers** | `session_outputs/_types.py` | `TestOutput`, `TestResult`, `LogEntry` dataclasses replacing untyped dicts. |
 | **Emergency stop** | `emergency_stop.py` | Binds F10 to interrupt the main thread (abort after current test). |
 | **MCP server** | `mcp/server.py` | Generic UI automation MCP server, parameterized via `RTTR_APP_MODULE`. |
 | **POM worker** | `mcp/pom_worker.py` | Ephemeral subprocess that imports all POMs once and executes method calls. |
@@ -65,53 +66,41 @@ def test_button_click(app: MyApp, debug_logger):
 | Symbol | Module | Description |
 |---|---|---|
 | `BaseModel` | `rttr.base` | Base class for all Page Object Models. |
-| `DebugLogger` | `rttr.debug_logger` | Per-session/per-test debug artifact manager. |
+| `DebugLogger` | `rttr.session_outputs.debug_logger` | Per-session/per-test debug artifact manager. |
+| `TestOutput` | `rttr.session_outputs._types` | Dataclass for per-test captured output, tracebacks, dumps. |
+| `TestResult` | `rttr.session_outputs._types` | Dataclass for test result entries (name, status, duration). |
+| `LogEntry` | `rttr.session_outputs._types` | Dataclass for timestamped log records. |
 | `phase_report_key` | `rttr` | StashKey for accessing per-phase test reports in fixtures. |
 | `debug_logger` fixture | `rttr` | Session-scoped fixture returning the `DebugLogger`. |
 
-Everything else (hooks, recording, session_data, emergency_stop, _state) is
+Everything else (hooks, session_outputs internals, emergency_stop) is
 **internal plumbing** — used by the plugin hooks but not intended for direct
 import by test code.
-
-## Package layout
-
-```
-rttr/                       ← project directory
-  rttr/                     ← importable Python package
-    __init__.py             ← orchestrator: composite hooks + debug_logger fixture
-    _state.py               ← shared singletons (recorder, debug_logger, etc.)
-    base.py                 ← BaseModel for POM classes (pywinauto abstraction)
-    debug_logger.py         ← DebugLogger: per-session/per-test debug folders
-    emergency_stop.py       ← F10 hotkey → interrupt_main (internal)
-    hooks.py                ← simple hooks: CLI options, collection, phase reports (internal)
-    recording.py            ← screen recording lifecycle orchestration (internal)
-    session_data.py         ← session_data.json + viewer + log capture (internal)
-    video_recorder.py       ← SessionRecorder (ffmpeg), chapter embedding, frame extraction
-    mcp/
-      __init__.py
-      server.py             ← FastMCP UI automation server
-      pom_worker.py         ← ephemeral POM subprocess worker
-  tests/                    ← full test suite (unit + integration)
-    conftest.py             ← state isolation fixtures
-    test_state.py
-    test_hooks.py
-    test_recording.py
-    test_session_data.py    ← also covers log capture (SessionLogHandler)
-    test_debug_logger.py
-    test_video_recorder.py
-    test_logging_handler.py ← SessionLogHandler + attach_log_handler
-    test_emergency_stop.py
-    test_plugin_integration.py  ← pytester-based integration tests
-```
 
 ## Architecture
 
 The `__init__.py` module acts as the **orchestrator**: it imports simple hooks
-from `hooks.py` and defines composite hooks that delegate to multiple
-sub-modules in the correct order.
+from `hooks.py` and defines composite hooks that delegate to the
+`session_outputs` package in the correct order.
+
+All session artifact logic lives in `rttr/session_outputs/`:
+
+```
+rttr/session_outputs/
+  __init__.py              ← lifecycle functions (start/stop recording, mark tests)
+  _state.py                ← SessionState singleton (recorder, debug_logger, test_outputs, etc.)
+  _types.py                ← TestOutput, TestResult, LogEntry dataclasses
+  _logger.py               ← SessionLogHandler + attach_log_handler()
+  video_recorder.py        ← SessionRecorder (ffmpeg screen capture)
+  video_chapters.py        ← embed_test_chapters() (post-recording)
+  session_report.py        ← generate() → session_data.json + viewer.html
+  debug_logger.py          ← DebugLogger (per-session/per-test directories)
+  test_outputs/
+    failure_frames.py      ← extract_failure_frames() (PNG extraction)
+```
 
 Shared state (recorder, debug_logger, collected_nodeids, etc.) lives in
-`_state.py` to avoid circular imports between sub-modules.
+`session_outputs/_state.py` to avoid circular imports between sub-modules.
 
 ### Hook lifecycle
 
@@ -119,9 +108,9 @@ Shared state (recorder, debug_logger, collected_nodeids, etc.) lives in
 sequenceDiagram
     participant pytest
     participant rttr as rttr/__init__
-    participant state as _state
-    participant rec as recording
-    participant sd as session_data
+    participant state as session_outputs/_state
+    participant rec as session_outputs
+    participant sd as session_outputs/session_report
     participant es as emergency_stop
 
     Note over pytest,es: Session start
@@ -159,82 +148,10 @@ sequenceDiagram
     rec->>state: recorder.stop()
     rec-->>rec: embed_test_chapters()
     rec-->>rec: extract_failure_frames()
-    rttr->>sd: generate(session)
-    sd-->>sd: save_metadata()
+    rttr->>sd: generate(session, exitstatus)
     sd-->>sd: _generate_session_data()
     sd-->>sd: _generate_standalone_viewer()
-```
-
-### Module dependency graph
-
-```mermaid
-graph TD
-    init["__init__.py<br/><i>orchestrator</i>"]
-    state["_state.py<br/><i>shared singletons</i>"]
-    hooks["hooks.py<br/><i>simple hooks</i>"]
-    recording["recording.py<br/><i>recording lifecycle</i>"]
-    session_data["session_data.py<br/><i>JSON + viewer + log capture</i>"]
-    emergency["emergency_stop.py<br/><i>F10 hotkey</i>"]
-    debug_log["debug_logger.py<br/><i>per-test dirs</i>"]
-    video_rec["video_recorder.py<br/><i>ffmpeg wrapper</i>"]
-    base["base.py<br/><i>POM base class</i>"]
-    mcp["mcp/server.py<br/><i>FastMCP tools</i>"]
-
-    init --> state
-    init --> hooks
-    init --> recording
-    init --> session_data
-    init --> emergency
-
-    recording --> state
-    recording --> video_rec
-    session_data --> state
-    session_data --> hooks
-    state --> debug_log
-    state --> video_rec
-    debug_log --> base
-    mcp --> base
-    mcp --> debug_log
-
-    classDef core fill:#2d6a4f,stroke:#1b4332,color:#fff
-    classDef infra fill:#264653,stroke:#1d3557,color:#fff
-    classDef ext fill:#e76f51,stroke:#c1440e,color:#fff
-    class init,hooks core
-    class state,recording,session_data,emergency infra
-    class debug_log,video_rec,base,mcp ext
-```
-
-### Session artifact flow
-
-```mermaid
-flowchart LR
-    subgraph "pytest run"
-        A[sessionstart] --> B[test 1..N]
-        B --> C[sessionfinish]
-    end
-
-    subgraph "debug_sessions/NNN_session_…"
-        D[session_info.md]
-        E[session_recording.mp4]
-        F[markers.jsonl]
-        G[session_data.json]
-        H[viewer.html]
-        I[test_execution_metadata.json]
-        J[failure_frames/]
-        K["NNN_test_slug/<br/>state.txt + screen.png"]
-    end
-
-    A -->|"init_debug_logger()"| D
-    B -->|"ffmpeg gdigrab"| E
-    B -->|"mark_test_start/end"| F
-    B -->|"capture()"| K
-    C -->|"embed_test_chapters()"| E
-    C -->|"extract_failure_frames()"| J
-    C -->|"save_metadata()"| I
-    C -->|"_generate_session_data()"| G
-    C -->|"_generate_standalone_viewer()"| H
-    F -.->|"parsed by"| G
-    G -.->|"embedded in"| H
+    sd-->>sd: clean up markers.jsonl
 ```
 
 ```
@@ -244,7 +161,7 @@ sessionstart        →     init debug_logger, start recorder, attach log captur
 collection          →     record nodeids, apply default timeouts
 runtest_logstart    →     emit video marker, create per-test debug dir
 runtest_makereport  →     stash phase report, emit video marker, capture output, finalise debug result
-sessionfinish       →     stop recorder, embed chapters, extract failure frames, generate session_data.json
+sessionfinish       →     stop recorder, embed chapters, extract failure frames, generate session_data.json + viewer.html
 ```
 
 ## CLI options
@@ -259,13 +176,9 @@ After a test run, the debug session folder contains:
 
 ```
 debug_sessions/NNN_session_TIMESTAMP/
-  session_info.md                        ← human-readable summary
+  session_data.json                      ← machine-readable session data (for AI)
+  viewer.html                            ← standalone browser viewer (for humans)
   session_recording.mp4                  ← desktop video (with chapter markers per test)
-  session_recording_markers.jsonl        ← test ↔ video timestamp mapping
-  session_data.json                      ← machine-readable session data
-  viewer.html                            ← standalone browser viewer
-  test_execution_metadata.json           ← seed, counts, failed tests
-  ffmpeg_stderr.log                      ← ffmpeg diagnostic output
   NNN_test_<slug>/                       ← per-test debug directory (discarded on pass)
     NNN_<label>/
       state.txt                          ← full UI tree text dump
@@ -276,19 +189,23 @@ debug_sessions/NNN_session_TIMESTAMP/
       frame_0002.png
 ```
 
-## Running the tests
+Intermediate files (`session_recording_markers.jsonl`) are cleaned up
+automatically after `session_data.json` is generated.
+
+## Running the self-tests
 
 ```bash
-python -m pytest rttr/tests/ -q -p no:rttr --timeout=30
+python -m pytest tests/ -q --timeout=30
 ```
 
-Use `-p no:rttr` because the rttr plugin is the **system under test**, not a
-runtime dependency for its own test suite.
+The `pyproject.toml` already configures `testpaths = ["tests"]` and
+`addopts = "-p no:rttr"` (the rttr plugin is the **system under test**, not a
+runtime dependency for its own test suite).
 
 With coverage:
 
 ```bash
-python -m pytest rttr/tests/ -q -p no:rttr --timeout=60 --cov=rttr/rttr --cov-report=term-missing
+python -m pytest tests/ -q --timeout=60 --cov=rttr --cov-report=term-missing
 ```
 
 ## Configuration
@@ -296,12 +213,15 @@ python -m pytest rttr/tests/ -q -p no:rttr --timeout=60 --cov=rttr/rttr --cov-re
 RTTR is configured via `pyproject.toml`:
 
 ```toml
-[tool.poetry]
-packages = [
-    { include = "rttr", from = "rttr" },
-]
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["rttr", "rttr.mcp", "rttr.session_outputs", "rttr.session_outputs.test_outputs"]
 ```
 
 The MCP server is parameterized via the `RTTR_APP_MODULE` environment variable,
 which specifies the fully-qualified path to the application class (e.g.
-`motionlab_integration_tests.pom.app:MotionLabApp`).
+`my_tests.pom.app:MyApp`).  The MCP server name defaults to `RTTR_MCP` and can
+be overridden with the `RTTR_MCP_NAME` env var.

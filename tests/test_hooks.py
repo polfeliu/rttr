@@ -92,11 +92,11 @@ class TestPytestCollectionModifyItems:
             item.get_closest_marker.return_value = None
 
         config = MagicMock()
-        _state.collected_nodeids.clear()
+        _state.session.collected_nodeids.clear()
 
         pytest_collection_modifyitems(config, items)
 
-        assert _state.collected_nodeids == [
+        assert _state.session.collected_nodeids == [
             "tests/test_a.py::test_one",
             "tests/test_b.py::test_two",
         ]
