@@ -127,6 +127,8 @@ input { font:inherit; background:var(--bg3); color:var(--fg); border:1px solid v
       <button class="tree-filter" data-filter="passed" onclick="setTreeFilter('passed')">Passed</button>
       <button class="tree-filter" data-filter="skipped" onclick="setTreeFilter('skipped')">Skipped</button>
       <button class="tree-filter" data-filter="not_run" onclick="setTreeFilter('not_run')">Not run</button>
+      <span style="flex:1"></span>
+      <button class="tree-filter" id="btn-sort" onclick="toggleTreeSort()" title="Toggle between file grouping and execution order">&#x23F1; Exec order</button>
     </div>
     <div id="test-tree"></div>
   </div>
@@ -144,6 +146,7 @@ input { font:inherit; background:var(--bg3); color:var(--fg); border:1px solid v
         <span class="time" id="time-display">0:00 / 0:00</span>
         <input id="speed-select" type="range" min="0.25" max="4" step="0.25" value="1" title="Playback speed" style="width:80px;">
         <span id="speed-label" style="font-size:11px;color:var(--fg-dim);">1x</span>
+
       </div>
       <div id="timeline"><div class="cursor" id="timeline-cursor"></div></div>
     </div>
@@ -194,11 +197,11 @@ var S = {
   allTests: [],
   selectedIdx: -1,
   selectedNodeid: null,
-  followPlayback: true,
   fps: 2,
   videoDuration: 0,
   logs: [],
   treeFilter: 'all',
+  treeSort: 'file',
 };
 
 function init() {
@@ -214,6 +217,7 @@ function loadSession() {
   const d = S.data;
   S.allTests = d.tests || [];
   S.tests = S.allTests.filter(t => t.result !== 'not_run');
+  S.tests.sort(function(a, b) { return a.video_start_s - b.video_start_s; });
   S.logs = d.logs || [];
   S.selectedIdx = -1;
   S.selectedNodeid = null;
@@ -242,6 +246,7 @@ function loadSession() {
 // ---- Tree sidebar ----
 
 function buildTree() {
+  if (S.treeSort === 'exec') { buildTreeExecOrder(); return; }
   const tree = {};
   for (const t of S.allTests) {
     const parts = t.nodeid.split('::');
@@ -298,6 +303,34 @@ function toggleGroup(el) {
   el.querySelector('.caret').classList.toggle('open');
 }
 
+function toggleTreeSort() {
+  S.treeSort = S.treeSort === 'file' ? 'exec' : 'file';
+  var btn = $('#btn-sort');
+  if (S.treeSort === 'exec') {
+    btn.classList.add('active');
+    btn.innerHTML = '&#x23F1; Exec order';
+  } else {
+    btn.classList.remove('active');
+    btn.innerHTML = '&#x1F4C1; By file';
+  }
+  buildTree();
+  // Re-highlight selected
+  if (S.selectedNodeid) {
+    $$('#test-tree .tree-node').forEach(n => n.classList.toggle('selected', n.dataset.nodeid === S.selectedNodeid));
+  }
+}
+
+function buildTreeExecOrder() {
+  var sorted = S.allTests.slice().sort(function(a, b) { return a.video_start_s - b.video_start_s; });
+  var html = '';
+  for (var i = 0; i < sorted.length; i++) {
+    var t = sorted[i];
+    var label = t.nodeid.split('::').pop();
+    html += testNode(t, label, 4);
+  }
+  $('#test-tree').innerHTML = html;
+}
+
 function worstResult(tests) {
   if (tests.some(t => t.result === 'failed')) return 'failed';
   if (tests.some(t => t.result === 'passed')) return 'passed';
@@ -314,7 +347,7 @@ function resultIcon(r) {
 function selectTest(nodeid, fromFollow) {
   S.selectedNodeid = nodeid;
   S.selectedIdx = S.tests.findIndex(t => t.nodeid === nodeid);
-  if (!fromFollow) S.followPlayback = false;
+
   const test = S.allTests.find(t => t.nodeid === nodeid);
 
   $$('#test-tree .tree-node').forEach(n => n.classList.toggle('selected', n.dataset.nodeid === nodeid));
@@ -407,10 +440,13 @@ $('#video').addEventListener('timeupdate', function() {
   var dur = S.videoDuration || 1;
   $('#timeline-cursor').style.left = (t / dur * 100) + '%';
   $('#time-display').textContent = fmt(t) + ' / ' + fmt(dur);
-  if (S.followPlayback) {
-    var current = S.tests.find(function(test) {
-      return test.result !== 'not_run' && t >= test.video_start_s && t < test.video_end_s;
-    });
+  if (S.tests.length) {
+    var current = null;
+    for (var i = S.tests.length - 1; i >= 0; i--) {
+      if (t >= S.tests[i].video_start_s) {
+        current = S.tests[i]; break;
+      }
+    }
     if (current && current.nodeid !== S.selectedNodeid) {
       selectTest(current.nodeid, true);
     }
@@ -418,11 +454,7 @@ $('#video').addEventListener('timeupdate', function() {
   updateLogHighlight(t);
 });
 
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape' && !S.followPlayback) {
-    S.followPlayback = true;
-  }
-});
+
 
 function fmt(s) {
   var m = Math.floor(s / 60);
