@@ -194,6 +194,7 @@ var S = {
   allTests: [],
   selectedIdx: -1,
   selectedNodeid: null,
+  followPlayback: true,
   fps: 2,
   videoDuration: 0,
   logs: [],
@@ -310,12 +311,15 @@ function resultIcon(r) {
 
 // ---- Test selection ----
 
-function selectTest(nodeid) {
+function selectTest(nodeid, fromFollow) {
   S.selectedNodeid = nodeid;
   S.selectedIdx = S.tests.findIndex(t => t.nodeid === nodeid);
+  if (!fromFollow) S.followPlayback = false;
   const test = S.allTests.find(t => t.nodeid === nodeid);
 
   $$('#test-tree .tree-node').forEach(n => n.classList.toggle('selected', n.dataset.nodeid === nodeid));
+  var selectedNode = document.querySelector('#test-tree .tree-node.selected');
+  if (selectedNode) selectedNode.scrollIntoView({ block: 'nearest', behavior: 'auto' });
   updateTestCounter();
 
   if (test) {
@@ -323,7 +327,7 @@ function selectTest(nodeid) {
     $('#output-content').textContent = test.captured_output || 'No captured output.';
     renderUiaTree(test.failure_dump);
     renderStateSnapshot(test.state_snapshot);
-    if (test.result !== 'not_run' && test.video_start_s > 0) {
+    if (!fromFollow && test.result !== 'not_run' && test.video_start_s > 0) {
       $('#video').currentTime = test.video_start_s;
     }
   }
@@ -403,7 +407,21 @@ $('#video').addEventListener('timeupdate', function() {
   var dur = S.videoDuration || 1;
   $('#timeline-cursor').style.left = (t / dur * 100) + '%';
   $('#time-display').textContent = fmt(t) + ' / ' + fmt(dur);
+  if (S.followPlayback) {
+    var current = S.tests.find(function(test) {
+      return test.result !== 'not_run' && t >= test.video_start_s && t < test.video_end_s;
+    });
+    if (current && current.nodeid !== S.selectedNodeid) {
+      selectTest(current.nodeid, true);
+    }
+  }
   updateLogHighlight(t);
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && !S.followPlayback) {
+    S.followPlayback = true;
+  }
 });
 
 function fmt(s) {
