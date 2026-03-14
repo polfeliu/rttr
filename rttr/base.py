@@ -195,9 +195,21 @@ class BaseModel:
             kwargs["process"] = pid
         handles: list[int] = []
         for elem in findwindows.find_elements(**kwargs):
-            # Skip shadow windows that block UIA COM
-            if any(marker in elem.class_name for marker in BaseModel._QT_SHADOW_MARKERS):
-                continue
+            win32_cn = elem.class_name
+            is_shadow = any(marker in win32_cn for marker in BaseModel._QT_SHADOW_MARKERS)
+            # When searching by UIA class_name, only skip pure shadow
+            # windows (e.g. "SysShadow").  Qt popup windows like
+            # "Qt5152QWindowPopupDropShadowSaveBits" contain shadow
+            # marker substrings but are real popups that must be probed.
+            if is_shadow:
+                if class_name is None:
+                    # General enumeration: skip shadows to avoid UIA COM hang
+                    continue
+                if win32_cn in BaseModel._QT_SHADOW_MARKERS:
+                    # Pure shadow window (exact match): always skip
+                    continue
+                # Otherwise: win32 name merely *contains* a marker
+                # (e.g. Qt popup).  Fall through to the UIA probe below.
             if title is not None and elem.name != title:
                 continue
             if title_re is not None and not re.search(title_re, elem.name):
@@ -207,7 +219,7 @@ class BaseModel:
                     uia_class = UIAElementInfo(elem.handle).class_name
                     if uia_class != class_name:
                         continue
-                except Exception:  # noqa: BLE001 — UIA probe can fail for destroyed windows
+                except Exception:  # noqa: BLE001 ΓÇö UIA probe can fail for destroyed windows
                     continue
             handles.append(elem.handle)
         return handles
@@ -408,7 +420,7 @@ class BaseModel:
         title_re: str | None = None,
         auto_id: str | None = None,
         class_name: str | None = None,
-        **kwargs: Any,  # noqa: ANN401 — forwarded to pywinauto child_window()
+        **kwargs: Any,  # noqa: ANN401 ΓÇö forwarded to pywinauto child_window()
     ) -> WindowSpecification:
         """Find a child element of this model.
 
@@ -647,7 +659,7 @@ class BaseModel:
         This is the preferred entry point for POMs that need to locate a
         popup or dialog that appears as a top-level window rather than a
         child of the main application window.  Individual POMs must **not**
-        call ``Desktop(backend="uia")`` directly — use this helper instead.
+        call ``Desktop(backend="uia")`` directly ΓÇö use this helper instead.
 
         Args:
             class_name: The Qt/Win32 class name to search for
@@ -714,7 +726,7 @@ class BaseModel:
                 result = predicate()
                 if result:
                     return result
-            except Exception as e:  # noqa: BLE001 — predicate can throw any caller-defined exception
+            except Exception as e:  # noqa: BLE001 ΓÇö predicate can throw any caller-defined exception
                 last_exc = e
             time.sleep(interval)
         if last_exc:

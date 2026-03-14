@@ -7,7 +7,7 @@ be correlated to a video frame.
 After the session ends, ``extract_failure_frames`` can extract PNG frames
 for every failed test, giving agents visual context for diagnosis.
 
-Usage — integrated automatically via conftest hooks::
+Usage ΓÇö integrated automatically via conftest hooks::
 
     # conftest.py
     from rttr.video_recorder import SessionRecorder
@@ -57,6 +57,29 @@ def _primary_monitor_size() -> tuple[int, int]:
         return (0, 0)
 
 
+def _kill_stale_ffmpeg() -> None:
+    """Kill any orphaned ffmpeg processes left over from previous sessions.
+
+    Uses ``taskkill`` on Windows to force-terminate all ffmpeg.exe processes.
+    This prevents resource leaks from sessions that crashed without cleanup.
+    Safe to call even when no ffmpeg is running (command simply reports
+    "not found" and returns a non-zero exit code, which is ignored).
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        subprocess.run(
+            ["taskkill", "/F", "/IM", "ffmpeg.exe"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        logger.info("Killed stale ffmpeg processes (if any).")
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
+        logger.debug("Could not kill stale ffmpeg: %s", exc)
+
+
 class SessionRecorder:
     """Manages an ffmpeg screen-recording subprocess for a test session."""
 
@@ -77,6 +100,9 @@ class SessionRecorder:
     def start(self, output_dir: Path) -> bool:
         """Start ffmpeg screen recording.
 
+        Kills any stale ffmpeg processes before launching a new one to
+        prevent resource leaks from sessions that crashed without cleanup.
+
         Args:
             output_dir: Directory where video and sidecar files are written.
 
@@ -84,8 +110,11 @@ class SessionRecorder:
             True if recording started successfully, False otherwise.
         """
         if not _ffmpeg_available():
-            logger.warning("ffmpeg not found on PATH — session recording disabled.")
+            logger.warning("ffmpeg not found on PATH ΓÇö session recording disabled.")
             return False
+
+        # Kill any orphaned ffmpeg from previous sessions before starting.
+        _kill_stale_ffmpeg()
 
         output_dir.mkdir(parents=True, exist_ok=True)
         self._video_path = output_dir / "session_recording.mp4"
@@ -141,7 +170,7 @@ class SessionRecorder:
                 creationflags=creation_flags,
             )
         except FileNotFoundError:
-            logger.warning("ffmpeg binary not found — session recording disabled.")
+            logger.warning("ffmpeg binary not found ΓÇö session recording disabled.")
             self._close_stderr()
             return False
         except OSError as exc:
@@ -191,7 +220,7 @@ class SessionRecorder:
             self._process.wait(timeout=15)
             logger.info("Screen recording stopped (pid=%d).", pid)
         except subprocess.TimeoutExpired:
-            logger.warning("ffmpeg did not exit in time — killing (pid=%d).", pid)
+            logger.warning("ffmpeg did not exit in time ΓÇö killing (pid=%d).", pid)
             self._process.kill()
             self._process.wait(timeout=5)
         except OSError as exc:
@@ -330,12 +359,12 @@ def embed_test_chapters(video_path: Path, markers_path: Path) -> bool:
     if not video_path.exists() or not markers_path.exists():
         return False
     if not _ffmpeg_available():
-        logger.warning("ffmpeg not available — cannot embed chapters.")
+        logger.warning("ffmpeg not available ΓÇö cannot embed chapters.")
         return False
 
     chapters = _build_chapters(markers_path)
     if not chapters:
-        logger.info("No test markers found — skipping chapter embedding.")
+        logger.info("No test markers found ΓÇö skipping chapter embedding.")
         return False
 
     metadata_path = video_path.with_suffix(".ffmetadata")
@@ -502,12 +531,12 @@ def extract_failure_frames(
         after_s: Seconds after test_end to include.
 
     Returns:
-        Mapping of test nodeid → list of extracted frame PNG paths.
+        Mapping of test nodeid ΓåÆ list of extracted frame PNG paths.
     """
     if not video_path.exists() or not markers_path.exists():
         return {}
     if not _ffmpeg_available():
-        logger.warning("ffmpeg not available — cannot extract failure frames.")
+        logger.warning("ffmpeg not available ΓÇö cannot extract failure frames.")
         return {}
 
     # Parse markers to find failed test time ranges.
@@ -528,7 +557,7 @@ def extract_failure_frames(
         if frames:
             result[nodeid] = frames
             logger.info(
-                "Extracted %d frames for %s (%.1fs–%.1fs).",
+                "Extracted %d frames for %s (%.1fsΓÇô%.1fs).",
                 len(frames),
                 nodeid,
                 seek,
