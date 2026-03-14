@@ -69,6 +69,10 @@ input { font:inherit; background:var(--bg3); color:var(--fg); border:1px solid v
 #timeline .marker.skipped-marker { color:var(--yellow); }
 #timeline .marker.failed-marker { color:var(--red); font-weight:700; }
 #timeline .marker:hover { background:rgba(255,255,255,0.1); }
+#timeline .marker, #timeline .segment { user-select:none; }
+#timeline .edge-indicator { position:absolute; top:0; width:20px; height:100%; z-index:4; pointer-events:none; display:none; font-size:10px; color:var(--fg-dim); display:flex; align-items:center; }
+#timeline .edge-indicator.left { left:0; background:linear-gradient(90deg, var(--bg3), transparent); justify-content:flex-start; padding-left:2px; }
+#timeline .edge-indicator.right { right:0; background:linear-gradient(270deg, var(--bg3), transparent); justify-content:flex-end; padding-right:2px; }
 
 .failure-overlay { position:fixed; z-index:100; background:var(--bg2); border:1px solid var(--red); border-radius:6px; padding:12px; max-width:600px; max-height:400px; overflow:auto; font-size:12px; box-shadow:0 4px 20px rgba(0,0,0,0.6); }
 .failure-overlay h4 { color:var(--red); margin-bottom:6px; }
@@ -148,7 +152,7 @@ input { font:inherit; background:var(--bg3); color:var(--fg); border:1px solid v
         <span id="speed-label" style="font-size:11px;color:var(--fg-dim);">1x</span>
 
       </div>
-      <div id="timeline"><div class="cursor" id="timeline-cursor"></div></div>
+      <div id="timeline"><div class="cursor" id="timeline-cursor"></div><div class="edge-indicator left" id="tl-edge-left">&laquo;</div><div class="edge-indicator right" id="tl-edge-right">&raquo;</div></div>
     </div>
     <div id="bottom-panel">
       <div id="tab-bar">
@@ -466,6 +470,9 @@ function updateTimelinePositions() {
   });
   var ct = $('#video').currentTime;
   $('#timeline-cursor').style.left = ((ct - S.tlStart) / range * 100) + '%';
+  var dur = S.videoDuration || 1;
+  $('#tl-edge-left').style.display = S.tlStart > 0.1 ? 'flex' : 'none';
+  $('#tl-edge-right').style.display = S.tlEnd < dur - 0.1 ? 'flex' : 'none';
 }
 
 // ---- Video zoom ----
@@ -539,6 +546,23 @@ $('#video').addEventListener('timeupdate', function() {
   var t = $('#video').currentTime;
   var dur = S.videoDuration || 1;
   var range = S.tlEnd - S.tlStart;
+  // Auto-pan timeline to keep cursor visible
+  if (range < dur && range > 0) {
+    if (t < S.tlStart || t > S.tlEnd) {
+      // Cursor outside view — center on it
+      S.tlStart = Math.max(0, t - range * 0.3);
+      S.tlEnd = S.tlStart + range;
+      if (S.tlEnd > dur) { S.tlEnd = dur; S.tlStart = dur - range; }
+      updateTimelinePositions();
+    } else if (t > S.tlStart + range * 0.85) {
+      // Cursor near right edge — scroll forward
+      var shift = range * 0.3;
+      S.tlStart = Math.min(dur - range, S.tlStart + shift);
+      S.tlEnd = S.tlStart + range;
+      updateTimelinePositions();
+    }
+    range = S.tlEnd - S.tlStart;
+  }
   if (range > 0) {
     $('#timeline-cursor').style.left = ((t - S.tlStart) / range * 100) + '%';
   }
