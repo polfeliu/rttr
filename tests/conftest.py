@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from rttr import _state
+
 if TYPE_CHECKING:
     from collections.abc import Generator
+    from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
@@ -24,8 +26,6 @@ def _isolate_state() -> Generator[None]:
     This prevents test-to-test pollution of the recorder, debug_logger,
     collected_nodeids, etc.
     """
-    from rttr import _state
-
     old_dl = _state.session.debug_logger
     old_outputs = _state.session.test_outputs.copy()
     old_nodeids = _state.session.collected_nodeids.copy()

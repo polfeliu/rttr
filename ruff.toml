@@ -55,9 +55,6 @@ ignore = [
 
 [lint.per-file-ignores]
 "tests/*" = [
-    "D", # Docstring rules (pydocstyle)
+    "D",   # Docstring rules (pydocstyle)
     "DOC", # Docstring rules (pydoclint)
-    "TC", # Type checking imports — tests use Path/pytest at runtime
-    "PLC0415", # Import outside top-level — needed for isolate_state fixture
-    "ARG002", # Unused method arguments — pytest fixtures pass through
 ]

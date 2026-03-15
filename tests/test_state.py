@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 from rttr.session_outputs import _state
 from rttr.session_outputs.debug_logger import DebugLogger
 from rttr.session_outputs.video_recorder import SessionRecorder
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class TestRecorderSingleton:

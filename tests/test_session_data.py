@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -301,8 +302,6 @@ class TestGenerate:
         )
 
         # Create frame directory matching the slug of "t::fail".
-        import re
-
         frame_slug = re.sub(r"[^a-zA-Z0-9_]", "_", "t::fail")[:120]
         frame_dir = tmp_path / "failure_frames" / frame_slug
         frame_dir.mkdir(parents=True)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -22,6 +23,7 @@ from rttr.session_outputs.video_chapters import (
 )
 from rttr.session_outputs.video_recorder import (
     SessionRecorder,
+    _kill_stale_ffmpeg,
     _primary_monitor_size,
     ffmpeg_available,
 )
@@ -437,9 +439,7 @@ class TestEmbedTestChaptersCleanup:
 
         with (
             patch("rttr.session_outputs.video_chapters.ffmpeg_available", return_value=True),
-            patch(
-                "rttr.session_outputs.video_chapters._remux_with_chapters", return_value=True
-            ),
+            patch("rttr.session_outputs.video_chapters._remux_with_chapters", return_value=True),
         ):
             embed_test_chapters(video, markers)
 
@@ -542,9 +542,7 @@ class TestExtractFrames:
         frame_dir = tmp_path / "frames"
         frame_dir.mkdir()
 
-        with patch(
-            "rttr.session_outputs.test_outputs.failure_frames.subprocess.run"
-        ) as mock_run:
+        with patch("rttr.session_outputs.test_outputs.failure_frames.subprocess.run") as mock_run:
             _extract_frames(video, frame_dir, 1.0, 3.0)
 
         mock_run.assert_called_once()
@@ -585,9 +583,7 @@ class TestExtractFrames:
         (frame_dir / "frame_0002.png").write_bytes(b"")
         (frame_dir / "frame_0001.png").write_bytes(b"")
 
-        with patch(
-            "rttr.session_outputs.test_outputs.failure_frames.subprocess.run"
-        ):
+        with patch("rttr.session_outputs.test_outputs.failure_frames.subprocess.run"):
             result = _extract_frames(video, frame_dir, 0.0, 5.0)
 
         assert len(result) == 2
@@ -599,8 +595,6 @@ class TestKillStaleFfmpeg:
     """Verify ``_kill_stale_ffmpeg`` helper."""
 
     def test_calls_taskkill_on_windows(self) -> None:
-        from rttr.session_outputs.video_recorder import _kill_stale_ffmpeg
-
         with (
             patch("rttr.session_outputs.video_recorder.sys.platform", "win32"),
             patch("rttr.session_outputs.video_recorder.subprocess.run") as mock_run,
@@ -612,8 +606,6 @@ class TestKillStaleFfmpeg:
         assert "taskkill" in cmd
 
     def test_noop_on_linux(self) -> None:
-        from rttr.session_outputs.video_recorder import _kill_stale_ffmpeg
-
         with (
             patch("rttr.session_outputs.video_recorder.sys.platform", "linux"),
             patch("rttr.session_outputs.video_recorder.subprocess.run") as mock_run,
@@ -623,8 +615,6 @@ class TestKillStaleFfmpeg:
         mock_run.assert_not_called()
 
     def test_handles_timeout(self) -> None:
-        from rttr.session_outputs.video_recorder import _kill_stale_ffmpeg
-
         with (
             patch("rttr.session_outputs.video_recorder.sys.platform", "win32"),
             patch(
@@ -761,8 +751,6 @@ class TestSessionRecorderStopExtended:
         assert "1920x1080" in cmd
 
     def test_elapsed_returns_positive_when_recording(self) -> None:
-        import time
-
         rec = SessionRecorder()
         rec._start_time = time.monotonic() - 5.0
         assert rec.elapsed >= 4.0

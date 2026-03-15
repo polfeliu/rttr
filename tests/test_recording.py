@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from rttr.session_outputs import (
     _state,
@@ -13,6 +12,9 @@ from rttr.session_outputs import (
     start_recording,
     stop_recording,
 )
+
+if TYPE_CHECKING:
+    import pytest
 
 
 class TestStart:
@@ -51,7 +53,7 @@ class TestStart:
 class TestStop:
     """Verify ``recording.stop`` stops the recorder and processes artifacts."""
 
-    def test_calls_recorder_stop(self, tmp_path: pytest.TempPathFactory) -> None:
+    def test_calls_recorder_stop(self) -> None:
         session = MagicMock()
         session.testsfailed = 0
 

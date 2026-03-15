@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
+from rttr.base import BaseModel
 from rttr.session_outputs.debug_logger import DebugLogger, _format_tree, _slugify
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class TestSlugify:
@@ -237,8 +241,6 @@ class TestDebugLogger:
         assert dl2.session_dir.name.startswith("002_")
 
     def test_capture_with_pom_element(self, tmp_path: Path) -> None:
-        from rttr.base import BaseModel
-
         dl = DebugLogger(sessions_root=tmp_path)
         dl.new_test("test_pom")
 
@@ -255,8 +257,6 @@ class TestDebugLogger:
         pom.dump_state.assert_called_once()
 
     def test_capture_pom_dump_state_uia_error(self, tmp_path: Path) -> None:
-        from rttr.base import BaseModel
-
         dl = DebugLogger(sessions_root=tmp_path)
         dl.new_test("test_pom_err")
 
