@@ -71,7 +71,9 @@ class TestFormatTree:
 
     def test_handles_uia_error_in_control_type(self) -> None:
         el = MagicMock()
-        type(el.element_info).control_type = property(lambda s: (_ for _ in ()).throw(RuntimeError("uia")))
+        type(el.element_info).control_type = property(
+            lambda _: (_ for _ in ()).throw(RuntimeError("uia"))
+        )
         el.window_text.return_value = "ok"
         el.is_enabled.return_value = True
         el.is_visible.return_value = True
