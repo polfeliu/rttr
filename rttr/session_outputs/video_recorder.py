@@ -208,6 +208,12 @@ class SessionRecorder:
             with contextlib.suppress(OSError):
                 self._process.kill()
         finally:
+            # Close process streams before dropping reference to avoid
+            # PytestUnraisableExceptionWarning from GC-flushed buffers.
+            for stream in (self._process.stdin, self._process.stdout, self._process.stderr):
+                if stream:
+                    with contextlib.suppress(OSError):
+                        stream.close()
             self._process = None
 
         if delete_on_success and not had_failures:

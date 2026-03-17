@@ -80,13 +80,18 @@ class ControlType(StrEnum):
     STATIC = "Static"
 
     @classmethod
-    def from_string(cls, value: str) -> ControlType:
+    def from_string(cls, value: str | None) -> ControlType:
         """Convert a string value to a ControlType enum.
 
         Returns:
-            The parsed ControlType member.
+            The parsed ControlType member, or CUSTOM for unknown values.
         """
-        return cls(value)
+        if not value:
+            return cls.CUSTOM
+        try:
+            return cls(value)
+        except ValueError:
+            return cls.CUSTOM
 
 
 @dataclass
@@ -783,7 +788,7 @@ class BaseModel:
                 control_type, auto_id = "", ""
                 cx, cy = 0, 0
                 with contextlib.suppress(AttributeError):
-                    control_type = el.element_info.control_type
+                    control_type = el.element_info.control_type or ""
                 with contextlib.suppress(AttributeError):
                     auto_id = el.element_info.auto_id
                 with contextlib.suppress(*UIA_ERRORS):
