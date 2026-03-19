@@ -27,6 +27,7 @@ class SessionState:
         self.test_outputs: dict[str, TestOutput] = {}
         self.collected_nodeids: list[str] = []
         self.session_log_entries: list[LogEntry] = []
+        self.collect_only: bool = False
 
     def reset(self) -> None:
         """Reset mutable collections for a fresh session.
@@ -37,6 +38,7 @@ class SessionState:
         self.test_outputs.clear()
         self.collected_nodeids.clear()
         self.session_log_entries.clear()
+        self.collect_only = False
 
     def init_debug_logger(self) -> DebugLogger:
         """Create (or return) the session-wide DebugLogger.

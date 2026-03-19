@@ -176,6 +176,7 @@ def _generate_session_data(
             "timestamp": datetime.now(tz=UTC).isoformat(),
             "seed": str(getattr(session.config, "_randomly_seed", "unknown")),
             "exit_status": exitstatus,
+            "collect_only": _state.session.collect_only,
             "failed_tests": [
                 item.nodeid
                 for item in session.items
@@ -204,7 +205,8 @@ def _generate_session_data(
         len(tests),
     )
 
-    _generate_standalone_viewer(session_dir, data)
+    if not _state.session.collect_only:
+        _generate_standalone_viewer(session_dir, data)
 
     # Clean up intermediate markers file — its data is now in session_data.json.
     if markers_path.exists():

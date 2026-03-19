@@ -362,6 +362,39 @@ class BaseModel:
             "to report whether its panel is currently visible."
         )
 
+    # ------------------------------------------------------------------
+    # Assertion helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _assert(condition: object, msg: str) -> None:
+        """Log and assert a condition.
+
+        Raises:
+            AssertionError: When *condition* is falsy.
+        """
+        if condition:
+            logger.info("[ASSERT] PASS: %s", msg)
+        else:
+            logger.error("[ASSERT] FAIL: %s", msg)
+            raise AssertionError(msg)
+
+    def assert_is_open(self, msg: str = "") -> None:
+        """Assert this widget is currently open/visible."""
+        self._assert(self.is_open(), msg or f"{self.name} should be open")
+
+    def assert_is_closed(self, msg: str = "") -> None:
+        """Assert this widget is currently closed/hidden."""
+        self._assert(not self.is_open(), msg or f"{self.name} should be closed")
+
+    def assert_exists(self, msg: str = "", timeout: int = 2) -> None:
+        """Assert the underlying element exists and is visible."""
+        self._assert(self.exists(timeout=timeout), msg or f"{self.name} should exist")
+
+    def assert_not_exists(self, msg: str = "") -> None:
+        """Assert the underlying element does not exist or is hidden."""
+        self._assert(not self.exists(timeout=0), msg or f"{self.name} should not exist")
+
     def dump_state(self) -> str:
         """Extract a clean, high-detail text representation of the UI state.
 

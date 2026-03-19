@@ -113,10 +113,19 @@ def _finalise_debug_result(item: pytest.Item) -> None:
 def pytest_sessionstart(session: pytest.Session) -> None:
     """Create debug logger, start recorder, attach log handler, bind hotkeys.
 
+    When ``--collect-only`` is active, only the debug logger is created so
+    that ``session_data.json`` is generated with a ``collect_only`` flag.
+    Video recording, log capture, and hotkeys are skipped.
+
     Args:
         session: The pytest Session object.
     """
+    _state.session.collect_only = session.config.option.collectonly
     _state.session.init_debug_logger()
+
+    if _state.session.collect_only:
+        return
+
     _start_recording(session)
     _attach_log_handler()
     emergency_stop.register()
@@ -125,11 +134,15 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """Stop recording, save metadata, generate session data.
 
+    When ``--collect-only`` is active, recording is skipped and only the
+    session data file is generated (without a viewer).
+
     Args:
         session: The pytest Session object.
         exitstatus: The exit status code.
     """
-    _stop_recording(session)
+    if not _state.session.collect_only:
+        _stop_recording(session)
     _generate_session(session, exitstatus)
 
 
