@@ -366,17 +366,54 @@ class BaseModel:
     # Assertion helpers
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _assert(condition: object, msg: str) -> None:
-        """Log and assert a condition.
+    def _assert(self, condition: object, msg: str, *, target: object = None) -> None:
+        """Log and assert a condition, including spatial data for the target element.
+
+        When *target* is provided (a pywinauto element or BaseModel), its
+        screen rect is used for the overlay highlight.  Otherwise falls back
+        to ``self.element`` (the whole widget).
+
+        Args:
+            condition: Truthy value means pass, falsy means fail.
+            msg: Descriptive assertion message.
+            target: Optional specific UI element to highlight (more precise
+                than the whole widget).
 
         Raises:
             AssertionError: When *condition* is falsy.
         """
+        from rttr.assertion_overlays import show_assertion  # noqa: PLC0415
+
+        status = "PASS" if condition else "FAIL"
+        # Resolve the element to highlight — prefer explicit target
+        highlight_element = target
+        if highlight_element is not None and isinstance(highlight_element, BaseModel):
+            highlight_element = highlight_element.element
+        if highlight_element is None:
+            highlight_element = self.element
+
+        rect_str = ""
+        rect_tuple: tuple[int, int, int, int] | None = None
+        try:
+            rect = highlight_element.rectangle()
+            rect_tuple = (rect.left, rect.top, rect.right, rect.bottom)
+            rect_str = (
+                f" widget={self.name}"
+                f" rect=({rect.left},{rect.top},{rect.right},{rect.bottom})"
+                f" center=({(rect.left + rect.right) // 2},{(rect.top + rect.bottom) // 2})"
+            )
+        except Exception:  # noqa: BLE001
+            rect_str = f" widget={self.name}"
+
         if condition:
-            logger.info("[ASSERT] PASS: %s", msg)
+            logger.info("[ASSERT] %s: %s%s", status, msg, rect_str)
         else:
-            logger.error("[ASSERT] FAIL: %s", msg)
+            logger.error("[ASSERT] %s: %s%s", status, msg, rect_str)
+
+        # Show real-time screen overlay (best-effort, non-blocking)
+        show_assertion(passed=bool(condition), rect=rect_tuple)
+
+        if not condition:
             raise AssertionError(msg)
 
     def assert_is_open(self, msg: str = "") -> None:
@@ -394,6 +431,49 @@ class BaseModel:
     def assert_not_exists(self, msg: str = "") -> None:
         """Assert the underlying element does not exist or is hidden."""
         self._assert(not self.exists(timeout=0), msg or f"{self.name} should not exist")
+
+    # ------------------------------------------------------------------
+    # Element-targeted assertions — highlight the specific UI element
+    # ------------------------------------------------------------------
+
+    def assert_element_visible(self, element: object, msg: str = "") -> None:
+        """Assert a UI element is visible, highlighting it on screen.
+
+        Args:
+            element: A pywinauto element (WindowSpecification or BaseWrapper).
+            msg: Optional assertion message.
+        """
+        self._assert(
+            element is not None and element.is_visible(),
+            msg or f"Element should be visible in {self.name}",
+            target=element,
+        )
+
+    def assert_element_enabled(self, element: object, msg: str = "") -> None:
+        """Assert a UI element is enabled, highlighting it on screen.
+
+        Args:
+            element: A pywinauto element (WindowSpecification or BaseWrapper).
+            msg: Optional assertion message.
+        """
+        self._assert(
+            element is not None and element.is_enabled(),
+            msg or f"Element should be enabled in {self.name}",
+            target=element,
+        )
+
+    def assert_element_exists(self, element: object, msg: str = "") -> None:
+        """Assert a UI element is not None (was found), highlighting it.
+
+        Args:
+            element: The element returned by a POM lookup method.
+            msg: Optional assertion message.
+        """
+        self._assert(
+            element is not None,
+            msg or f"Element should exist in {self.name}",
+            target=element,
+        )
 
     def dump_state(self) -> str:
         """Extract a clean, high-detail text representation of the UI state.
@@ -493,7 +573,7 @@ class BaseModel:
             parent_handle = None
         selector = ", ".join(f"{k}={v!r}" for k, v in kwargs.items())
         logger.info(
-            "[POM] %s.find_element parent_handle=%s selector={%s}",
+            "[FIND] %s.find_element parent_handle=%s selector={%s}",
             self.name,
             parent_handle,
             selector,
@@ -537,7 +617,7 @@ class BaseModel:
             except UIA_ERRORS:
                 ctrl_class = ""
             logger.info(
-                "[POM] %s.click -> title=%r class=%r rect=(%d,%d,%d,%d) center=(%d,%d)",
+                "[CLICK] %s -> title=%r class=%r rect=(%d,%d,%d,%d) center=(%d,%d)",
                 self.name,
                 ctrl_title,
                 ctrl_class,
@@ -551,7 +631,6 @@ class BaseModel:
 
             self._move_mouse_smoothly(center_x, center_y)
             target_control.click_input()
-            logger.info("[POM] %s.click -> performed", self.name)
             # UIA settlement delay to avoid "event was unable to invoke subscribers" errors
             # during subsequent state dumps or interactions.
             time.sleep(0.5)
