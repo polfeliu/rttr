@@ -395,7 +395,7 @@ class BaseModel:
         rect_str = ""
         rect_tuple: tuple[int, int, int, int] | None = None
         try:
-            rect = highlight_element.rectangle()
+            rect = highlight_element.rectangle()  # type: ignore[attr-defined]
             rect_tuple = (rect.left, rect.top, rect.right, rect.bottom)
             rect_str = (
                 f" widget={self.name}"
@@ -444,7 +444,7 @@ class BaseModel:
             msg: Optional assertion message.
         """
         self._assert(
-            element is not None and element.is_visible(),
+            element is not None and element.is_visible(),  # type: ignore[attr-defined]
             msg or f"Element should be visible in {self.name}",
             target=element,
         )
@@ -457,7 +457,7 @@ class BaseModel:
             msg: Optional assertion message.
         """
         self._assert(
-            element is not None and element.is_enabled(),
+            element is not None and element.is_enabled(),  # type: ignore[attr-defined]
             msg or f"Element should be enabled in {self.name}",
             target=element,
         )

@@ -45,7 +45,7 @@ def _primary_monitor_size() -> tuple[int, int]:
     if sys.platform != "win32":
         return (0, 0)
     try:
-        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        user32 = ctypes.windll.user32
         user32.SetProcessDPIAware()
         return (int(user32.GetSystemMetrics(0)), int(user32.GetSystemMetrics(1)))
     except (AttributeError, OSError, ValueError):

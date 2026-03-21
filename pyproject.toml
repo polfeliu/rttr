@@ -29,3 +29,51 @@ include = ["rttr*"]
 
 [tool.setuptools.package-data]
 rttr = ["session_viewer.html"]
+
+# ---------------------------------------------------------------------------
+#  Dev dependency groups
+# ---------------------------------------------------------------------------
+
+[project.optional-dependencies]
+dev = [
+    "poethepoet>=0.35.0",
+    "ruff>=0.15.0",
+    "mypy>=1.19.0",
+    "pytest>=9.0.0",
+]
+
+# ---------------------------------------------------------------------------
+#  Poe tasks
+# ---------------------------------------------------------------------------
+
+[tool.poe.tasks.ruff-format-check]
+help = "Format check with ruff"
+cmd = "ruff format --check rttr tests"
+
+[tool.poe.tasks.ruff-check]
+help = "Check with ruff"
+cmd = "ruff check rttr tests"
+
+[tool.poe.tasks.format]
+help = "Check format (format + lint)"
+sequence = ["ruff-format-check", "ruff-check"]
+
+[tool.poe.tasks.ruff-format]
+help = "Format files with ruff"
+cmd = "ruff format rttr tests"
+
+[tool.poe.tasks.ruff-check-fix]
+help = "Fix lint errors"
+cmd = "ruff check --fix rttr tests"
+
+[tool.poe.tasks.reformat]
+help = "Reformat files and fix lint errors"
+sequence = ["ruff-format", "ruff-check-fix"]
+
+[tool.poe.tasks.type]
+help = "Run type checks"
+cmd = "mypy rttr"
+
+[tool.poe.tasks.tests]
+help = "Run unit tests"
+cmd = "python -I -m pytest tests"

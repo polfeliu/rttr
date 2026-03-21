@@ -11,6 +11,7 @@ Requires ``pywin32`` (already a pywinauto dependency).
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import logging
 import threading
@@ -21,8 +22,7 @@ import win32gui
 
 logger = logging.getLogger(__name__)
 
-# COLORREF (BGR)
-_GREEN = 0x0000FF00
+_GREEN = 0x0000FF00  # COLORREF (BGR)
 _RED = 0x000000FF
 _BG_KEY = 0x00010101  # near-black used as transparency key
 _OVERLAY_DURATION_S = 0.6
@@ -49,17 +49,15 @@ def _create_overlay_window(
         try:
             class_name = f"RTTROverlay_{threading.current_thread().ident}"
             wc = win32gui.WNDCLASS()
-            wc.lpszClassName = class_name
+            wc.lpszClassName = class_name  # type: ignore[misc]
             # Solid brush in the key colour — becomes fully transparent
             bg_brush = win32gui.CreateSolidBrush(_BG_KEY)
-            wc.hbrBackground = bg_brush
-            wc.lpfnWndProc = {
-                win32con.WM_DESTROY: lambda hwnd, msg, wp, lp: 0,
+            wc.hbrBackground = bg_brush  # type: ignore[assignment,misc]
+            wc.lpfnWndProc = {  # type: ignore[misc]
+                win32con.WM_DESTROY: lambda _hwnd, _msg, _wp, _lp: 0,
             }
-            try:
+            with contextlib.suppress(Exception):
                 win32gui.RegisterClass(wc)
-            except Exception:  # noqa: BLE001
-                pass
 
             ex_style = (
                 win32con.WS_EX_LAYERED
@@ -74,8 +72,14 @@ def _create_overlay_window(
                 class_name,
                 "",
                 win32con.WS_POPUP | win32con.WS_VISIBLE,
-                left, top, width, height,
-                0, 0, 0, None,
+                left,
+                top,
+                width,
+                height,
+                0,
+                0,
+                0,
+                None,
             )
 
             # Color-key transparency: _BG_KEY becomes invisible, border remains
@@ -84,7 +88,7 @@ def _create_overlay_window(
             # Fill entire window with the key color first (makes interior transparent)
             hdc = win32gui.GetDC(hwnd)
             key_brush = win32gui.CreateSolidBrush(_BG_KEY)
-            win32gui.FillRect(hdc, (0, 0, width, height), key_brush)
+            win32gui.FillRect(hdc, (0, 0, width, height), key_brush)  # type: ignore[arg-type]
             win32gui.DeleteObject(key_brush)
 
             # Draw dashed border on top (8px on, 6px off, 3px wide)
@@ -104,14 +108,10 @@ def _create_overlay_window(
 
             _time.sleep(duration)
 
-            try:
+            with contextlib.suppress(Exception):
                 win32gui.DestroyWindow(hwnd)
-            except Exception:  # noqa: BLE001
-                pass
-            try:
-                win32gui.UnregisterClass(class_name, 0)
-            except Exception:  # noqa: BLE001
-                pass
+            with contextlib.suppress(Exception):
+                win32gui.UnregisterClass(class_name, 0)  # type: ignore[arg-type]
         except Exception:  # noqa: BLE001 — overlay is best-effort
             logger.debug("[OVERLAY] Failed to create assertion overlay", exc_info=True)
 

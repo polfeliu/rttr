@@ -171,7 +171,7 @@ def _get_app() -> BaseModel:
     """
     get_active = getattr(_AppClass, "get_active_instance", None)
     if get_active is not None:
-        return get_active()
+        return get_active()  # type: ignore[no-any-return]
     raise RuntimeError(
         f"{_AppClass.__name__} has no get_active_instance() classmethod. "
         "Launch the application first via app_launch."

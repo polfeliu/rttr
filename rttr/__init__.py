@@ -23,9 +23,11 @@ from rttr import emergency_stop
 from rttr.hooks import (
     phase_report_key,
     pytest_addoption,
-    pytest_collection_modifyitems,
     pytest_report_header,
     store_phase_report,
+)
+from rttr.hooks import (
+    pytest_collection_modifyitems as _hooks_collection_modifyitems,
 )
 from rttr.session_outputs import _state
 from rttr.session_outputs import (
@@ -61,8 +63,8 @@ if TYPE_CHECKING:
 __all__ = [
     "phase_report_key",
     "pytest_addoption",
-    "pytest_collection_modifyitems",
     "pytest_report_header",
+    "_start_recording",
 ]
 
 _logger = logging.getLogger(__name__)
@@ -71,6 +73,72 @@ _logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+def _compute_test_suffix(nodeids: list[str]) -> str:
+    """Derive a short descriptive suffix from collected test node IDs.
+
+    Returns:
+        A suffix like ``test_control``, ``test_disp_close_button_exists``,
+        or ``tests`` for multi-file runs.
+    """
+    if not nodeids:
+        return "empty"
+
+    # Extract unique file stems
+    files: set[str] = set()
+    for nid in nodeids:
+        file_part = nid.split("::")[0]
+        # Handle both / and \\ path separators
+        stem = file_part.rsplit("/", 1)[-1].rsplit("\\", 1)[-1].removesuffix(".py")
+        files.add(stem)
+
+    if len(nodeids) == 1:
+        # Single test → use test function name
+        return nodeids[0].rsplit("::", maxsplit=1)[-1]
+    if len(files) == 1:
+        # All tests from same file → file stem
+        return next(iter(files))
+    # Multiple files
+    return "tests"
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config,
+    items: list[pytest.Item],
+) -> None:
+    """Record collected tests, apply timeouts, rename session dir, start recording.
+
+    Wraps the original hook from ``hooks.py`` and adds:
+    - Descriptive session folder rename based on collected test names.
+    - Deferred recording start (needs the final session directory path).
+
+    Args:
+        config: The pytest Config object.
+        items: The collected test items.
+    """
+    _hooks_collection_modifyitems(config, items)
+
+    dl = _state.session.debug_logger
+    if dl is not None:
+        suffix = _compute_test_suffix(_state.session.collected_nodeids)
+        dl.apply_suffix(suffix)
+
+    if not _state.session.collect_only:
+        _start_recording_from_config(config)
+
+
+def _start_recording_from_config(config: pytest.Config) -> None:
+    """Start the screen recorder using the pytest Config.
+
+    Args:
+        config: The pytest Config object.
+    """
+    dl = _state.session.debug_logger
+    if dl is None:
+        return
+    if not config.getoption("--no-record", default=False):
+        _state.session.recorder.start(dl.session_dir)
 
 
 def _finalise_debug_result(item: pytest.Item) -> None:
@@ -126,7 +194,6 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     if _state.session.collect_only:
         return
 
-    _start_recording(session)
     _attach_log_handler()
     emergency_stop.register()
 

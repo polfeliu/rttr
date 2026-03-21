@@ -26,6 +26,7 @@ select = [
     "TID", # flake8 tidy imports
     "TC", # flake8 type checking
     "ARG", # flake8 unused arguments
+    "TD", # flake8 todos
     "ERA", # eradicate commented out code
     "PGH", # pygrep hooks
     "FLY", # flyint f-strings

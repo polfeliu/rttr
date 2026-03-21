@@ -147,7 +147,6 @@ def _generate_session_data(
             "duration_s": round(ends.get(nodeid, 0.0) - starts.get(nodeid, 0.0), 1),
             "traceback": output_data.traceback or None,
             "captured_output": output_data.captured_output or None,
-            "assertions": _extract_assertions(output_data.captured_output),
             "failure_dump": failure_dump,
             "state_snapshot": output_data.state_snapshot or None,
             "frames": frame_paths,

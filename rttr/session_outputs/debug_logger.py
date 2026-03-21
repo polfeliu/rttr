@@ -6,7 +6,7 @@ with UI tree dumps and screenshots.
 Folder layout::
 
     debug_sessions/
-        NNN_session_YYYY-MM-DD_HH-MM-SS/
+        YYYY-MM-DD_HH-MM-SS <suffix>/
             session_data.json
             viewer.html
             session_recording.mp4
@@ -120,12 +120,14 @@ class DebugLogger:
 
     def __init__(self, sessions_root: Path = DEBUG_SESSIONS_ROOT) -> None:
         sessions_root.mkdir(parents=True, exist_ok=True)
-        existing = sorted(sessions_root.iterdir())
-        next_idx = len(existing) + 1
 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        folder_name = f"{next_idx:03d}_session_{timestamp}"
-        self.session_dir = sessions_root / folder_name
+        self.session_dir = sessions_root / timestamp
+        if self.session_dir.exists():
+            counter = 2
+            while (sessions_root / f"{timestamp} ({counter})").exists():
+                counter += 1
+            self.session_dir = sessions_root / f"{timestamp} ({counter})"
         self.session_dir.mkdir(parents=True, exist_ok=True)
 
         self._test_counter = 0
@@ -142,6 +144,25 @@ class DebugLogger:
     def test_dir(self) -> Path | None:
         """Public accessor for the current test's debug directory."""
         return self._test_dir
+
+    def apply_suffix(self, suffix: str) -> None:
+        """Rename the session directory to include a descriptive suffix.
+
+        Called after test collection so the folder name reflects which
+        tests were selected.  E.g. ``2026-03-21_13-50-16 test_control``.
+
+        Args:
+            suffix: Short label derived from collected test node IDs.
+        """
+        new_name = f"{self._session_start_dt} {suffix}"
+        new_path = self.session_dir.parent / new_name
+        if new_path.exists():
+            counter = 2
+            while (self.session_dir.parent / f"{new_name} ({counter})").exists():
+                counter += 1
+            new_path = self.session_dir.parent / f"{new_name} ({counter})"
+        self.session_dir.rename(new_path)
+        self.session_dir = new_path
 
     # ------------------------------------------------------------------
     def new_test(self, test_name: str) -> None:
