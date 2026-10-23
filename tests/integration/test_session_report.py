@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-@pytest.fixture()
+@pytest.fixture
 def rttr_session_dir(tmp_path: Path) -> Path:
     """Run a minimal test through RTTR and return the debug session dir."""
     test_file = tmp_path / "test_sample.py"

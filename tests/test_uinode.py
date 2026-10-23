@@ -27,7 +27,15 @@ class TestUINodeToDict:
     def test_required_keys_present(self) -> None:
         node = _make_node()
         d = node.to_dict()
-        for key in ["control_type", "class_name", "title", "auto_id", "is_visible", "is_enabled", "children"]:
+        for key in [
+            "control_type",
+            "class_name",
+            "title",
+            "auto_id",
+            "is_visible",
+            "is_enabled",
+            "children",
+        ]:
             assert key in d, f"Missing key: {key}"
 
     def test_children_is_list(self) -> None:

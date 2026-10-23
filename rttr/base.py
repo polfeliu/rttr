@@ -659,8 +659,7 @@ class BaseModel:
         duration = max(0.01, min(0.05, dist / 64000.0))
         steps = int(duration * 250)  # Maximum frequency for "instant" feel
 
-        if steps < 1:
-            steps = 1
+        steps = max(steps, 1)
         pt = wintypes.POINT()
         ctypes.windll.user32.GetCursorPos(ctypes.byref(pt))
         start_x, start_y = pt.x, pt.y

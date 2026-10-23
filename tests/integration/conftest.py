@@ -32,7 +32,7 @@ _STARTUP_TIMEOUT = 10  # seconds
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def dummy_app_process() -> Generator[subprocess.Popen[bytes]]:
     """Launch the dummy Qt app and yield the ``Popen`` handle.
 
@@ -65,7 +65,7 @@ def dummy_app_process() -> Generator[subprocess.Popen[bytes]]:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def app_window(dummy_app_process: subprocess.Popen[bytes]) -> WindowSpecification:
     """Connect to the dummy app's main window via pywinauto (UIA backend)."""
     app = Application(backend="uia").connect(
@@ -75,7 +75,7 @@ def app_window(dummy_app_process: subprocess.Popen[bytes]) -> WindowSpecificatio
     return app.window(title=_APP_TITLE)
 
 
-@pytest.fixture()
+@pytest.fixture
 def app_model(app_window: WindowSpecification) -> BaseModel:
     """Return a ``BaseModel`` wrapping the dummy app's main window."""
     return BaseModel(app_window, name="DummyApp")

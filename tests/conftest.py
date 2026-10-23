@@ -42,7 +42,7 @@ def _isolate_state() -> Generator[None]:
     _state.session.session_log_entries.extend(old_logs)
 
 
-@pytest.fixture()
+@pytest.fixture
 def tmp_session_dir(tmp_path: Path) -> Path:
     """Provide a temporary directory simulating a debug session folder."""
     d = tmp_path / "001_session_2026-03-13_12-00-00"
@@ -50,7 +50,7 @@ def tmp_session_dir(tmp_path: Path) -> Path:
     return d
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_recorder() -> MagicMock:
     """Return a mock SessionRecorder patched into ``_state``."""
     rec = MagicMock()
