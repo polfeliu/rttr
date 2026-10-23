@@ -1,4 +1,4 @@
-[submodule "tools/ruff-config"]
-	path = tools/ruff-config
-	url = git@github.com:feliupol/ruff-config.git
+[submodule "tools/rulesets"]
+	path = tools/rulesets
+	url = git@github.com:feliupol/rulesets.git
 	branch = main

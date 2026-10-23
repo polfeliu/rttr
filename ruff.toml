@@ -1,20 +1,20 @@
-extend = "tools/ruff-config/ruff/ruff.toml"
-extend-exclude = ["tools/ruff-config"]
+extend = "tools/rulesets/ruff/ruff.toml"
+extend-exclude = ["tools/rulesets"]
 target-version = "py313"
 
 [lint]
 pydocstyle.convention = "google"
 
 ignore = [
-    "import-private-name",  # PLC2701 TODO(ruff-config): stop importing private names (29)
-    "pytest-incorrect-pytest-import",  # PT013 TODO(ruff-config): import pytest as a module (2)
-    "subprocess-run-without-check",  # PLW1510 TODO(ruff-config): pass check= to subprocess.run (2)
-    "dict-index-missing-items",  # PLC0206 TODO(ruff-config): iterate with .items() (1)
-    "logging-exc-info",  # G201 TODO(ruff-config): use logging.exception (1)
-    "pytest-composite-assertion",  # PT018 TODO(ruff-config): split composite assertion (1)
-    "raise-without-from-inside-except",  # B904 TODO(ruff-config): chain the exception (1)
-    "try-except-continue",  # S112 TODO(ruff-config): log instead of silent continue (1)
-    "unnecessary-assign",  # RET504 TODO(ruff-config): return directly (1)
+    "import-private-name",  # PLC2701 TODO(rulesets): stop importing private names (29)
+    "pytest-incorrect-pytest-import",  # PT013 TODO(rulesets): import pytest as a module (2)
+    "subprocess-run-without-check",  # PLW1510 TODO(rulesets): pass check= to subprocess.run (2)
+    "dict-index-missing-items",  # PLC0206 TODO(rulesets): iterate with .items() (1)
+    "logging-exc-info",  # G201 TODO(rulesets): use logging.exception (1)
+    "pytest-composite-assertion",  # PT018 TODO(rulesets): split composite assertion (1)
+    "raise-without-from-inside-except",  # B904 TODO(rulesets): chain the exception (1)
+    "try-except-continue",  # S112 TODO(rulesets): log instead of silent continue (1)
+    "unnecessary-assign",  # RET504 TODO(rulesets): return directly (1)
 ]
 
 extend-select = [
