@@ -1,61 +1,156 @@
-line-length = 100
+extend = "tools/ruff-config/ruff/ruff.toml"
+extend-exclude = ["tools/ruff-config"]
 target-version = "py313"
-preview = true
 
 [lint]
 pydocstyle.convention = "google"
 
-select = [
-    "F", # Pyflakes
-    "E", # pycodestyle
-    "W", # pycodestyle
-    "I", # isort
-    "N", # pep8-naming
-    "D", # pydocstyle
-    "UP", # pyupgrade
-    "T10", # Flake8 Debugger
-    "C4", # flake8 comprehensions
-    "A", # flake8 builtins shadowing
-    "ISC", # flake8 implicit string concatenation
-    "LOG", # flake8 logging
-    "PIE", # flake8 pie
-    "T20", # flake8 prints
-    "Q", # flake8 quotes
-    "RSE", # flake8 raise
-    "SIM", # flake8 simplify
-    "TID", # flake8 tidy imports
-    "TC", # flake8 type checking
-    "ARG", # flake8 unused arguments
-    "TD", # flake8 todos
-    "ERA", # eradicate commented out code
-    "PGH", # pygrep hooks
-    "FLY", # flyint f-strings
-    "NPY", # numpy rules
-    "PERF", # perflint
-    "DOC", # pydoclint
-    "COM", # Flake 8 trailing commas
-    "RUF005", # Ruff collection concatenation
-    "RUF008", # Ruff dataclasses mutable defaults
-    "RUF027", # Missing f-string syntax
-    "RUF012", # Mutable class default
-    "B006", # Mutable-argument-default
-    "PLC0415", # Pylint import-outside-toplevel
-    "ANN401", # Disallow typing.Any
-    "BLE001", # Do not catch blind Exception
-]
-
-ignore = [
-    "C90", # mccabe complexity
-    "D100", # Missing docstring in public module
-    "D104", # Missing docstring in public package
-    "D107", # Missing docstring in __init__
-    "COM812", # Trailing comma. Already enforced by the formatter.
-    "DOC502", # Raises documented in docstring that are not explicit in the code
-    "T201", # flake8-print: we use print a lot in this agent
+extend-select = [
+    # ANN: kept from the previous configuration
+    "any-type",  # ANN401
+    # ARG: kept from the previous configuration
+    "unused-method-argument",  # ARG002
+    # BLE: kept from the previous configuration
+    "blind-except",  # BLE001
+    # COM: kept from the previous configuration
+    "prohibited-trailing-comma",  # COM819
+    # D: kept from the previous configuration
+    "undocumented-public-class",  # D101
+    "undocumented-public-method",  # D102
+    "undocumented-public-function",  # D103
+    "undocumented-magic-method",  # D105
+    "undocumented-public-nested-class",  # D106
+    "unnecessary-multiline-docstring",  # D200
+    "blank-line-before-function",  # D201
+    "blank-line-after-function",  # D202
+    "missing-blank-line-after-summary",  # D205
+    "docstring-tab-indentation",  # D206
+    "under-indentation",  # D207
+    "over-indentation",  # D208
+    "new-line-after-last-paragraph",  # D209
+    "surrounding-whitespace",  # D210
+    "blank-line-before-class",  # D211
+    "multi-line-summary-first-line",  # D212
+    "overindented-section",  # D214
+    "triple-single-quotes",  # D300
+    "escape-sequence-in-docstring",  # D301
+    "signature-in-docstring",  # D402
+    "first-word-uncapitalized",  # D403
+    "non-capitalized-section-name",  # D405
+    "no-blank-line-after-section",  # D410
+    "no-blank-line-before-section",  # D411
+    "blank-lines-between-header-and-content",  # D412
+    "empty-docstring-section",  # D414
+    "missing-terminal-punctuation",  # D415
+    "missing-section-name-colon",  # D416
+    "undocumented-param",  # D417
+    "overload-with-docstring",  # D418
+    "empty-docstring",  # D419
+    "incorrect-section-order",  # D420
+    "property-docstring-starts-with-verb",  # D421
+    # DOC: kept from the previous configuration
+    "docstring-extraneous-parameter",  # DOC102
+    "docstring-missing-returns",  # DOC201
+    "docstring-extraneous-returns",  # DOC202
+    "docstring-missing-yields",  # DOC402
+    "docstring-extraneous-yields",  # DOC403
+    "docstring-missing-exception",  # DOC501
+    # E: kept from the previous configuration
+    "mixed-spaces-and-tabs",  # E101
+    "indentation-with-invalid-multiple",  # E111
+    "no-indented-block",  # E112
+    "unexpected-indentation",  # E113
+    "indentation-with-invalid-multiple-comment",  # E114
+    "no-indented-block-comment",  # E115
+    "unexpected-indentation-comment",  # E116
+    "over-indented",  # E117
+    "whitespace-after-open-bracket",  # E201
+    "whitespace-before-close-bracket",  # E202
+    "whitespace-before-punctuation",  # E203
+    "whitespace-after-decorator",  # E204
+    "whitespace-before-parameters",  # E211
+    "multiple-spaces-before-operator",  # E221
+    "multiple-spaces-after-operator",  # E222
+    "tab-before-operator",  # E223
+    "tab-after-operator",  # E224
+    "missing-whitespace-around-operator",  # E225
+    "missing-whitespace-around-arithmetic-operator",  # E226
+    "missing-whitespace-around-bitwise-or-shift-operator",  # E227
+    "missing-whitespace-around-modulo-operator",  # E228
+    "missing-whitespace",  # E231
+    "multiple-spaces-after-comma",  # E241
+    "tab-after-comma",  # E242
+    "unexpected-spaces-around-keyword-parameter-equals",  # E251
+    "missing-whitespace-around-parameter-equals",  # E252
+    "too-few-spaces-before-inline-comment",  # E261
+    "no-space-after-inline-comment",  # E262
+    "no-space-after-block-comment",  # E265
+    "multiple-leading-hashes-for-block-comment",  # E266
+    "multiple-spaces-after-keyword",  # E271
+    "multiple-spaces-before-keyword",  # E272
+    "tab-after-keyword",  # E273
+    "tab-before-keyword",  # E274
+    "missing-whitespace-after-keyword",  # E275
+    "blank-line-between-methods",  # E301
+    "blank-lines-top-level",  # E302
+    "too-many-blank-lines",  # E303
+    "blank-line-after-decorator",  # E304
+    "blank-lines-after-function-or-class",  # E305
+    "blank-lines-before-nested-definition",  # E306
+    "line-too-long",  # E501
+    "redundant-backslash",  # E502
+    "multiple-statements-on-one-line-colon",  # E701
+    "multiple-statements-on-one-line-semicolon",  # E702
+    "useless-semicolon",  # E703
+    # I: kept from the previous configuration
+    "missing-required-import",  # I002
+    # ISC: kept from the previous configuration
+    "single-line-implicit-string-concatenation",  # ISC001
+    "multi-line-implicit-string-concatenation",  # ISC002
+    # N: kept from the previous configuration
+    "invalid-function-name",  # N802
+    "invalid-argument-name",  # N803
+    "invalid-module-name",  # N999
+    # NPY: kept from the previous configuration
+    "numpy-deprecated-type-alias",  # NPY001
+    "numpy-legacy-random",  # NPY002
+    "numpy-deprecated-function",  # NPY003
+    "numpy2-deprecation",  # NPY201
+    # PERF: kept from the previous configuration
+    "try-except-in-loop",  # PERF203
+    "manual-list-comprehension",  # PERF401
+    # PLC: kept from the previous configuration
+    "import-outside-top-level",  # PLC0415
+    # Q: kept from the previous configuration
+    "bad-quotes-inline-string",  # Q000
+    "bad-quotes-multiline-string",  # Q001
+    "bad-quotes-docstring",  # Q002
+    "avoidable-escaped-quote",  # Q003
+    "unnecessary-escaped-quote",  # Q004
+    # SIM: kept from the previous configuration
+    "multiple-with-statements",  # SIM117
+    # TC: kept from the previous configuration
+    "typing-only-first-party-import",  # TC001
+    "typing-only-third-party-import",  # TC002
+    "typing-only-standard-library-import",  # TC003
+    # TID: kept from the previous configuration
+    "banned-api",  # TID251
+    "relative-imports",  # TID252
+    "banned-module-level-imports",  # TID253
+    "lazy-import-mismatch",  # TID254
+    # UP: kept from the previous configuration
+    "quoted-annotation",  # UP037
+    # W: kept from the previous configuration
+    "tab-indentation",  # W191
+    "trailing-whitespace",  # W291
+    "missing-newline-at-end-of-file",  # W292
+    "blank-line-with-whitespace",  # W293
+    "too-many-newlines-at-end-of-file",  # W391
+    "doc-line-too-long",  # W505
 ]
 
 [lint.per-file-ignores]
 "tests/*" = [
-    "D",   # Docstring rules (pydocstyle)
-    "DOC", # Docstring rules (pydoclint)
+    "D",  # docstring rules
+    "DOC",  # pydoclint
 ]

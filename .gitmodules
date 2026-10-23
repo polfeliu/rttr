@@ -1,0 +1,4 @@
+[submodule "tools/ruff-config"]
+	path = tools/ruff-config
+	url = git@github.com:feliupol/ruff-config.git
+	branch = main
